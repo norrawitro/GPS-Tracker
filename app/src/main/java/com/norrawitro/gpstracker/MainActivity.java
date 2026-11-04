@@ -37,6 +37,9 @@ public class MainActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private WebView web;
     private boolean pageReady;
+    /** True while the app password has not been entered since the app was last opened. */
+    private volatile boolean locked;
+    private java.io.File downloadedApk;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
@@ -44,6 +47,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         TrackingService.ensureChannels(this);
         TrackingService.reconcile(this);
+        locked = AppLock.enabled(this);
 
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -70,6 +74,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
+                emitLock();
                 emitState();
                 emitPendingAsk();
             }
@@ -83,7 +88,24 @@ public class MainActivity extends Activity {
         super.onResume();
         visible = this;
         TrackingService.reconcile(this);
-        if (pageReady) { emitState(); emitPendingAsk(); }
+        // Back from the "install unknown apps" setting: continue the install if it is allowed now.
+        if (downloadedApk != null && Updater.ensureInstallAllowedSilently(this)) {
+            java.io.File apk = downloadedApk;
+            downloadedApk = null;
+            Updater.install(this, apk);
+        }
+        if (pageReady) { emitLock(); emitState(); emitPendingAsk(); }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Leaving the app (Home, another app, screen off) locks it again.
+        if (AppLock.enabled(this)) locked = true;
+    }
+
+    private void emitLock() {
+        emit("lock", "{\"enabled\":" + AppLock.enabled(this) + ",\"locked\":" + locked + "}");
     }
 
     @Override
@@ -109,7 +131,7 @@ public class MainActivity extends Activity {
 
     private void emitPendingAsk() {
         String pend = TrackingService.prefs(this).getString("pending", null);
-        if (pend != null && TrackingService.recording(this)) emit("ask", pend);
+        if (!locked && pend != null && TrackingService.recording(this)) emit("ask", pend);
     }
 
     /** Sends the current state to the page if the app is on screen. */
@@ -152,12 +174,39 @@ public class MainActivity extends Activity {
     private class Bridge {
         @JavascriptInterface
         public String state() {
+            if (locked) return "{\"locked\":true}";
             return TrackingService.state(MainActivity.this).toString();
+        }
+
+        @JavascriptInterface
+        public String unlock(String pw) {
+            String err = AppLock.unlock(MainActivity.this, pw);
+            if (err.isEmpty()) {
+                locked = false;
+                emitState();
+                emitPendingAsk();
+            }
+            return err;
+        }
+
+        /** Set, change or (new = "") remove the app password. Returns "" on success or a message. */
+        @JavascriptInterface
+        public String changePassword(String current, String next) {
+            if (locked) return "ปลดล็อกแอปก่อน";
+            String err = AppLock.change(MainActivity.this, current, next);
+            if (err.isEmpty()) emitLock();
+            return err;
+        }
+
+        @JavascriptInterface
+        public boolean lockEnabled() {
+            return AppLock.enabled(MainActivity.this);
         }
 
         /** Button 1. */
         @JavascriptInterface
         public void toggle() {
+            if (locked) return;
             main.post(() -> {
                 if (TrackingService.recording(MainActivity.this)) {
                     TrackingService.stop(MainActivity.this);
@@ -174,6 +223,7 @@ public class MainActivity extends Activity {
         /** Button 2: name the current place. */
         @JavascriptInterface
         public void savePlace(String name) {
+            if (locked) return;
             main.post(() -> {
                 TrackingService s = TrackingService.instance;
                 if (!TrackingService.recording(MainActivity.this) || s == null) {
@@ -196,6 +246,7 @@ public class MainActivity extends Activity {
         /** Answer to "คุณอยู่ที่ไหน?" shown in the app. Empty name = closed without naming. */
         @JavascriptInterface
         public void answer(String name) {
+            if (locked) return;
             main.post(() -> {
                 TrackingService s = TrackingService.instance;
                 if (s != null) s.answer(name);
@@ -205,6 +256,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void setSettings(int intervalMin, int checkEvery, int radiusM) {
+            if (locked) return;
             TrackingService.prefs(MainActivity.this).edit()
                     .putInt("intervalMin", intervalMin).putInt("checkEvery", Math.max(1, checkEvery))
                     .putInt("radiusM", Math.max(5, radiusM)).apply();
@@ -213,6 +265,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void listFiles() {
+            if (locked) return;
             io.execute(() -> {
                 try { emit("files", TrackLog.list(MainActivity.this).toString()); }
                 catch (Exception e) { emit("files", "[]"); }
@@ -221,6 +274,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void readFile(String id) {
+            if (locked) return;
             io.execute(() -> {
                 try {
                     JSONObject o = new JSONObject();
@@ -236,6 +290,7 @@ public class MainActivity extends Activity {
         /** Opens or shares a route file with another app (Sheets, Excel, a file manager). */
         @JavascriptInterface
         public void shareFile(String id, String name) {
+            if (locked) return;
             main.post(() -> {
                 Uri uri = Uri.withAppendedPath(MediaStore.Files.getContentUri("external"), id);
                 Intent send = new Intent(Intent.ACTION_SEND).setType("text/csv")
@@ -245,12 +300,63 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** "Display over other apps" setting, needed for the floating "คุณอยู่ที่ไหน?" window. */
+        @JavascriptInterface
+        public void openOverlaySettings() {
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openNotificationSettings() {
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                } catch (Exception ignored) {}
+            });
+        }
+
         @JavascriptInterface
         public void openAppSettings() {
             main.post(() -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
                 } catch (Exception ignored) {}
+            });
+        }
+
+        @JavascriptInterface
+        public String version() {
+            return BuildConfig.VERSION_NAME;
+        }
+
+        /** Asks GitHub Releases for a newer version. Answers with the "update" event. */
+        @JavascriptInterface
+        public void checkUpdate() {
+            io.execute(() -> {
+                try { emit("update", Updater.check().toString()); }
+                catch (Exception e) { emit("update", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            });
+        }
+
+        @JavascriptInterface
+        public void installUpdate(String url) {
+            io.execute(() -> {
+                try {
+                    java.io.File apk = Updater.download(MainActivity.this, url, pct -> emit("updateProgress", String.valueOf(pct)));
+                    emit("updateProgress", "100");
+                    main.post(() -> {
+                        if (Updater.ensureInstallAllowed(MainActivity.this)) Updater.install(MainActivity.this, apk);
+                        else downloadedApk = apk;
+                    });
+                } catch (Exception e) {
+                    emit("update", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}");
+                }
             });
         }
 

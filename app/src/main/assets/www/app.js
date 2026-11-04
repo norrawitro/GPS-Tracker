@@ -35,9 +35,20 @@
     $("b1t").textContent = on ? "หยุดบันทึก" : "เริ่มบันทึก";
     $("b1d").textContent = on ? "หยุดจับพิกัดและการทำงานเบื้องหลัง" : "เริ่มจับพิกัดตามความถี่ที่ตั้งไว้";
     $("permCard").hidden = s.permission !== false || on;
+    const needPopup = s.overlay === false, needNotif = s.notifications === false;
+    $("popupCard").hidden = !(needPopup || needNotif);
+    $("popupAllow").hidden = !needPopup; $("notifAllow").hidden = !needNotif;
+    $("popupText").textContent = needNotif && !needPopup ? "การแจ้งเตือนของแอปถูกปิดอยู่ ถ้าแอปอยู่เบื้องหลังจะไม่รู้ว่ามีคำถาม \"คุณอยู่ที่ไหน?\""
+      : "ให้แอปเด้งหน้าต่างถามชื่อสถานที่ขึ้นกลางจอได้ แม้กำลังใช้แอปอื่นอยู่ ไม่อย่างนั้นจะมีแค่การแจ้งเตือนเล็ก ๆ ด้านบน";
+    $("popupSetting").textContent = (s.overlay ? "เด้งหน้าต่างกลางจอได้แล้ว" : "ยังไม่ได้อนุญาตให้แสดงทับแอปอื่น จะเห็นแค่การแจ้งเตือน")
+      + (s.notifications === false ? " · การแจ้งเตือนถูกปิดอยู่" : "");
     if (!$("mAsk").hidden && !s.pending) $("mAsk").hidden = true;
   }
-  handlers.state = s => { state = { ...state, ...s }; render(); };
+  handlers.state = s => {
+    if (!s) return;
+    if (s.locked) { if (handlers.lock) handlers.lock({ enabled: true, locked: true }); return; }
+    state = { ...state, ...s }; render();
+  };
   handlers.warn = msg => toast(msg);
   handlers.needPermission = () => { state.permission = false; render(); };
   function pullState() { if (A) { try { handlers.state(JSON.parse(A.state())); } catch {} } }
@@ -57,6 +68,8 @@
     A.toggle();
   });
   $("openSettings").addEventListener("click", () => A && A.openAppSettings());
+  ["popupAllow", "popupAllow2"].forEach(id => $(id).addEventListener("click", () => A && A.openOverlaySettings && A.openOverlaySettings()));
+  ["notifAllow", "notifAllow2"].forEach(id => $(id).addEventListener("click", () => A && A.openNotificationSettings && A.openNotificationSettings()));
 
   // ---------- button 2 ----------
   $("b2").addEventListener("click", () => {
@@ -160,6 +173,92 @@
     state = { ...state, intervalMin: interval, checkEvery: check, radiusM: radius }; render();
     $("sStatus").textContent = state.recording ? "บันทึกแล้ว ใช้ตั้งแต่รอบการบันทึกถัดไป" : "บันทึกแล้ว";
   });
+
+  // ---------- app update (OTA from GitHub Releases) ----------
+  let latest = null;
+  $("appVer").textContent = A && A.version ? A.version() : "-";
+  $("checkUpd").addEventListener("click", () => {
+    if (!A) { $("updState").textContent = "ตรวจหาอัปเดตได้เฉพาะในแอปบนมือถือ"; return; }
+    $("checkUpd").disabled = true; $("updNow").hidden = true; $("updState").textContent = "กำลังตรวจ…";
+    A.checkUpdate();
+  });
+  handlers.update = u => {
+    $("checkUpd").disabled = false;
+    if (!u) return;
+    $("updBanner").hidden = !(u.available && u.url);
+    if (u.available) { $("bannerVer").textContent = u.latest; }
+    if (u.error) { $("updState").textContent = "ตรวจหาอัปเดตไม่สำเร็จ: " + u.error; $("updNow").disabled = false; $("updNow").textContent = "อัปเดตเลย"; return; }
+    if (u.available) {
+      latest = u;
+      $("updState").textContent = `มีเวอร์ชันใหม่ ${u.latest}` + (u.notes ? ` · ${String(u.notes).split("\n")[0]}` : "");
+      $("updNow").hidden = false; $("updNow").disabled = false; $("updNow").textContent = "อัปเดตเลย";
+    } else {
+      $("updState").textContent = u.message || "เป็นเวอร์ชันล่าสุดแล้ว";
+    }
+  };
+  function startInstall() {
+    if (!A || !latest || !latest.url) return;
+    $("updNow").disabled = true; $("updNow").textContent = "กำลังดาวน์โหลด…";
+    $("bannerBtn").disabled = true; $("bannerState").textContent = "กำลังดาวน์โหลด…";
+    A.installUpdate(latest.url);
+  }
+  $("updNow").addEventListener("click", startInstall);
+  $("bannerBtn").addEventListener("click", startInstall);
+  // Check for a new version every time the app opens; Android still asks before installing.
+  if (A && A.checkUpdate) A.checkUpdate();
+  handlers.updateProgress = pct => {
+    $("updNow").textContent = pct < 100 ? `กำลังดาวน์โหลด ${pct}%` : "ติดตั้ง";
+    $("bannerState").textContent = pct < 100 ? `กำลังดาวน์โหลด ${pct}%` : "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา";
+    if (pct >= 100) $("bannerBtn").disabled = false;
+    if (pct >= 100) { $("updNow").disabled = false; $("updState").textContent = "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา"; }
+  };
+
+  // ---------- app password ----------
+  let lockEnabled = false;
+  function renderPw() {
+    $("pwState").textContent = lockEnabled ? "ตั้งรหัสผ่านแล้ว แอปจะล็อกทุกครั้งที่ออกจากแอป" : "ยังไม่ได้ตั้งรหัสผ่าน ใครเปิดเครื่องก็เข้าแอปได้";
+    $("pwCurField").hidden = !lockEnabled; $("pwRemove").hidden = !lockEnabled;
+    $("pwSave").textContent = lockEnabled ? "เปลี่ยนรหัสผ่าน" : "ตั้งรหัสผ่าน";
+  }
+  handlers.lock = l => {
+    lockEnabled = !!(l && l.enabled); renderPw();
+    const show = !!(l && l.locked);
+    if (show && $("lockScreen").hidden) { $("lockPw").value = ""; $("lockStatus").textContent = ""; }
+    $("lockScreen").hidden = !show;
+    if (show) { $("mAsk").hidden = true; $("mPlace").hidden = true; setTimeout(() => $("lockPw").focus(), 60); }
+    else pullState();
+  };
+  $("lockBtn").addEventListener("click", () => {
+    if (!A) return;
+    $("lockBtn").disabled = true; $("lockStatus").textContent = "กำลังตรวจ…";
+    setTimeout(() => {
+      const err = A.unlock($("lockPw").value);
+      $("lockBtn").disabled = false;
+      if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
+      $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
+      pullState();
+    }, 30);
+  });
+  $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("lockBtn").click(); });
+  function savePw(remove) {
+    if (!A) { $("pwStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    const cur = $("pwCur").value, next = remove ? "" : $("pwNew").value;
+    if (!remove) {
+      if (next.length < 4) { $("pwStatus").textContent = "รหัสผ่านต้องยาวอย่างน้อย 4 ตัว"; return; }
+      if (next !== $("pwNew2").value) { $("pwStatus").textContent = "รหัสผ่านใหม่ 2 ช่องไม่ตรงกัน"; return; }
+    }
+    $("pwStatus").textContent = "กำลังบันทึก…";
+    setTimeout(() => {
+      const err = A.changePassword(cur, next);
+      if (err) { $("pwStatus").textContent = err; return; }
+      lockEnabled = !remove; renderPw();
+      ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
+      $("pwStatus").textContent = remove ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
+    }, 30);
+  }
+  $("pwSave").addEventListener("click", () => savePw(false));
+  $("pwRemove").addEventListener("click", () => savePw(true));
+  if (A && A.lockEnabled) { lockEnabled = A.lockEnabled(); renderPw(); }
 
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
