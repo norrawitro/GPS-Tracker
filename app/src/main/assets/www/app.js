@@ -161,6 +161,36 @@
     $("sStatus").textContent = state.recording ? "บันทึกแล้ว ใช้ตั้งแต่รอบการบันทึกถัดไป" : "บันทึกแล้ว";
   });
 
+  // ---------- app update (OTA from GitHub Releases) ----------
+  let latest = null;
+  $("appVer").textContent = A && A.version ? A.version() : "-";
+  $("checkUpd").addEventListener("click", () => {
+    if (!A) { $("updState").textContent = "ตรวจหาอัปเดตได้เฉพาะในแอปบนมือถือ"; return; }
+    $("checkUpd").disabled = true; $("updNow").hidden = true; $("updState").textContent = "กำลังตรวจ…";
+    A.checkUpdate();
+  });
+  handlers.update = u => {
+    $("checkUpd").disabled = false;
+    if (!u) return;
+    if (u.error) { $("updState").textContent = "ตรวจหาอัปเดตไม่สำเร็จ: " + u.error; $("updNow").disabled = false; $("updNow").textContent = "อัปเดตเลย"; return; }
+    if (u.available) {
+      latest = u;
+      $("updState").textContent = `มีเวอร์ชันใหม่ ${u.latest}` + (u.notes ? ` · ${String(u.notes).split("\n")[0]}` : "");
+      $("updNow").hidden = false; $("updNow").disabled = false; $("updNow").textContent = "อัปเดตเลย";
+    } else {
+      $("updState").textContent = u.message || "เป็นเวอร์ชันล่าสุดแล้ว";
+    }
+  };
+  $("updNow").addEventListener("click", () => {
+    if (!A || !latest || !latest.url) return;
+    $("updNow").disabled = true; $("updNow").textContent = "กำลังดาวน์โหลด…";
+    A.installUpdate(latest.url);
+  });
+  handlers.updateProgress = pct => {
+    $("updNow").textContent = pct < 100 ? `กำลังดาวน์โหลด ${pct}%` : "ติดตั้ง";
+    if (pct >= 100) { $("updNow").disabled = false; $("updState").textContent = "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา"; }
+  };
+
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
   tick(); setInterval(tick, 10000);

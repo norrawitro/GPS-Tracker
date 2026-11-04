@@ -15,6 +15,7 @@ android {
         targetSdk 35
         versionCode buildNumber
         versionName "1.0.${buildNumber}"
+        buildConfigField "String", "UPDATE_REPO", "\"norrawitro/GPS-Tracker\""
     }
 
     // Releases are signed with the private key from GitHub secrets. Android only installs a new

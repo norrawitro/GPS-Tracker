@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private WebView web;
     private boolean pageReady;
+    private java.io.File downloadedApk;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
@@ -83,6 +84,12 @@ public class MainActivity extends Activity {
         super.onResume();
         visible = this;
         TrackingService.reconcile(this);
+        // Back from the "install unknown apps" setting: continue the install if it is allowed now.
+        if (downloadedApk != null && Updater.ensureInstallAllowedSilently(this)) {
+            java.io.File apk = downloadedApk;
+            downloadedApk = null;
+            Updater.install(this, apk);
+        }
         if (pageReady) { emitState(); emitPendingAsk(); }
     }
 
@@ -251,6 +258,36 @@ public class MainActivity extends Activity {
                 try {
                     startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
                 } catch (Exception ignored) {}
+            });
+        }
+
+        @JavascriptInterface
+        public String version() {
+            return BuildConfig.VERSION_NAME;
+        }
+
+        /** Asks GitHub Releases for a newer version. Answers with the "update" event. */
+        @JavascriptInterface
+        public void checkUpdate() {
+            io.execute(() -> {
+                try { emit("update", Updater.check().toString()); }
+                catch (Exception e) { emit("update", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            });
+        }
+
+        @JavascriptInterface
+        public void installUpdate(String url) {
+            io.execute(() -> {
+                try {
+                    java.io.File apk = Updater.download(MainActivity.this, url, pct -> emit("updateProgress", String.valueOf(pct)));
+                    emit("updateProgress", "100");
+                    main.post(() -> {
+                        if (Updater.ensureInstallAllowed(MainActivity.this)) Updater.install(MainActivity.this, apk);
+                        else downloadedApk = apk;
+                    });
+                } catch (Exception e) {
+                    emit("update", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}");
+                }
             });
         }
 
