@@ -32,7 +32,7 @@
     $("nearText").textContent = s.nearName && s.nearM >= 0 ? `ใกล้ ${s.nearName} ${Number(s.nearM).toLocaleString("th-TH")} เมตร` : "-";
     $("nextAt").textContent = on && s.nextAt ? hm(s.nextAt) : on ? "กำลังจับพิกัด…" : "-";
     $("errText").hidden = !s.lastError; $("errText").textContent = s.lastError || "";
-    $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง`;
+    $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง` + (s.battery >= 0 ? ` · แบตตอนบันทึกล่าสุด ${s.battery}%` : "");
     $("b1").classList.toggle("primary", !on); $("b1").classList.toggle("stop", on);
     $("b1t").textContent = on ? "หยุดบันทึก" : "เริ่มบันทึก";
     $("b1d").textContent = on ? "หยุดจับพิกัดและการทำงานเบื้องหลัง" : "เริ่มจับพิกัดตามความถี่ที่ตั้งไว้";
@@ -173,7 +173,7 @@
     $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง` : "ไฟล์นี้ยังไม่มีข้อมูล";
     // Date above time, so the whole row fits a phone screen without scrolling sideways.
     const when = v => { const [d, t] = String(v || "").split(" "); return t ? `<span class="t">${esc(t)}</span><span class="dd">${esc(d)}</span>` : esc(v); };
-    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}</td></tr>`).join("")
+    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}${x[6] ? `<span class="near">แบต ${esc(x[6])}%</span>` : ""}</td></tr>`).join("")
       || '<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
   };
   $("backFiles").addEventListener("click", () => showView("vFiles"));

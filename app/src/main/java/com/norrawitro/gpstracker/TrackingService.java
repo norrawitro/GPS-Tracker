@@ -95,6 +95,7 @@ public class TrackingService extends Service {
             o.put("lastPlace", p.getString("lastPlace", ""));
             o.put("nearName", p.getString("nearName", ""));
             o.put("nearM", p.getLong("nearM", -1));
+            o.put("battery", p.getInt("battery", -1));
             o.put("nextAt", p.getLong("nextAt", 0));
             o.put("lastError", p.getString("lastError", ""));
             o.put("pending", p.getString("pending", null) != null ? new JSONObject(p.getString("pending", "{}")) : JSONObject.NULL);
@@ -366,7 +367,9 @@ public class TrackingService extends Service {
         io.execute(() -> {
             try {
                 PlacesDb.Place near = new PlacesDb(this).nearest(lat, lng);
-                TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM);
+                int battery = batteryPct(this);
+                TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM, battery);
+                prefs(this).edit().putInt("battery", battery).apply();
                 SharedPreferences.Editor e = prefs(this).edit();
                 if (near == null) e.remove("nearName").remove("nearM");
                 else e.putString("nearName", near.name).putLong("nearM", Math.round(near.distanceM));
@@ -376,6 +379,17 @@ public class TrackingService extends Service {
             }
             MainActivity.push(this);
         });
+    }
+
+    /** Battery level 0-100, or -1 when the phone does not report it. */
+    static int batteryPct(Context c) {
+        try {
+            int v = c.getSystemService(android.os.BatteryManager.class)
+                    .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            return v >= 0 && v <= 100 ? v : -1;
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private void refresh() {
