@@ -187,7 +187,7 @@
   });
   function updateHint() {
     const m = +$("sInterval").value * Math.max(1, +$("sCheck").value || 1);
-    $("checkHint").textContent = `ตรวจชื่อสถานที่ทุก ${m < 60 ? m + " นาที" : (m / 60).toFixed(m % 60 ? 1 : 0) + " ชั่วโมง"} โดยประมาณ`;
+    $("checkHint").textContent = `ถ้าหยุดอยู่ที่ใหม่ที่ยังไม่มีชื่อนานราว ${m < 60 ? m + " นาที" : (m / 60).toFixed(m % 60 ? 1 : 0) + " ชั่วโมง"} จะถามว่า "คุณอยู่ที่ไหน?" ระหว่างเดินทางจะไม่ถาม`;
   }
   ["sInterval", "sCheck"].forEach(id => $(id).addEventListener("input", updateHint));
   $("sSave").addEventListener("click", () => {
