@@ -112,7 +112,7 @@
 
   // ---------- button 3: files ----------
   let files = [], current = null;
-  $("b3").addEventListener("click", () => { showView("vFiles"); loadFiles(); });
+  $("b3").addEventListener("click", () => { showView("vFiles"); renderFolderHint(); loadFiles(); });
   $("refreshFiles").addEventListener("click", loadFiles);
   let filesTimer;
   function loadFiles() {
@@ -122,6 +122,12 @@
     filesTimer = setTimeout(() => { $("fileTree").innerHTML = '<div class="empty">โหลดรายการไฟล์ไม่สำเร็จ กด "โหลดใหม่" อีกครั้ง</div>'; }, 10000);
     try { A.listFiles(); } catch (e) { clearTimeout(filesTimer); $("fileTree").innerHTML = `<div class="empty">เปิดรายการไฟล์ไม่ได้: ${esc(e.message)}</div>`; }
   }
+  function renderFolderHint() {
+    const has = A && A.hasFolder ? A.hasFolder() : false;
+    $("folderHint").hidden = has;
+  }
+  $("pickFolder").addEventListener("click", () => { if (A && A.pickFolder) A.pickFolder(); });
+  handlers.folderPicked = () => { toast("แสดงไฟล์ทั้งหมดในโฟลเดอร์แล้ว"); renderFolderHint(); loadFiles(); };
   handlers.filesError = msg => { clearTimeout(filesTimer); $("fileTree").innerHTML = `<div class="empty">อ่านรายการไฟล์ไม่ได้: ${esc(msg)}</div>`; };
   handlers.files = list => {
     clearTimeout(filesTimer);
@@ -132,7 +138,7 @@
       const e = byDay[day] || (byDay[day] = { id: "", ids: [], name: day + "-track.csv", folder: f.folder, size: 0 });
       e.ids.push(f.id); e.size += +f.size || 0;
     }
-    files = Object.values(byDay).map(e => { e.ids.sort((x, y) => x - y); e.id = e.ids.join(","); return e; })
+    files = Object.values(byDay).map(e => { e.ids.sort((x, y) => String(x).localeCompare(String(y), undefined, { numeric: true })); e.id = e.ids.join("|"); return e; })
       .sort((x, y) => y.name.localeCompare(x.name));
     if (!files.length) { $("fileTree").innerHTML = '<div class="empty">ยังไม่มีข้อมูลการเดินทาง</div>'; return; }
     const groups = {};
