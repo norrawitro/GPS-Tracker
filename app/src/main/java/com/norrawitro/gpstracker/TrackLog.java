@@ -23,12 +23,13 @@ import java.util.Locale;
 /**
  * Daily route files: Documents/GPS-Track/YYYY/MM/DD/YYYY-MM-DD-track.csv
  * Columns: วัน-เดือน-ปี เวลา, ละติจูด, ลองจิจูด, ชื่อสถานที่ (empty when unknown),
- * ใกล้สถานที่ (closest named place), ระยะห่าง(เมตร) (distance to it; both empty when no place is saved yet).
+ * ใกล้สถานที่ (closest named place), ระยะห่าง(เมตร) (distance to it; both empty when no place is saved yet),
+ * แบตเตอรี่(%) (phone battery level when the row was written, empty if unknown).
  * The folder comes from each row's own time, so a changed clock starts a new day's folder.
  */
 public final class TrackLog {
     public static final String ROOT = "Documents/GPS-Track/";
-    private static final String HEADER = "วันเวลา,ละติจูด,ลองจิจูด,ชื่อสถานที่,ใกล้สถานที่,ระยะห่าง(เมตร)\r\n";
+    private static final String HEADER = "วันเวลา,ละติจูด,ลองจิจูด,ชื่อสถานที่,ใกล้สถานที่,ระยะห่าง(เมตร),แบตเตอรี่(%)\r\n";
     private static final Uri FILES = MediaStore.Files.getContentUri("external");
 
     private TrackLog() {}
@@ -55,7 +56,7 @@ public final class TrackLog {
 
     /** Appends one row to that day's file, creating folders and the file when needed. */
     public static synchronized void append(Context c, long millis, double lat, double lng, String place,
-                                           String nearName, double nearM) throws Exception {
+                                           String nearName, double nearM, int batteryPct) throws Exception {
         ContentResolver cr = c.getContentResolver();
         String folder = folderFor(millis), name = fileFor(millis);
         Uri uri = find(cr, folder, name);
@@ -71,7 +72,8 @@ public final class TrackLog {
         }
         String row = stamp(millis) + "," + String.format(Locale.US, "%.6f", lat) + ","
                 + String.format(Locale.US, "%.6f", lng) + "," + csv(place == null ? "" : place.trim()) + ","
-                + csv(nearName == null ? "" : nearName) + "," + (nearName == null ? "" : String.valueOf(Math.round(nearM))) + "\r\n";
+                + csv(nearName == null ? "" : nearName) + "," + (nearName == null ? "" : String.valueOf(Math.round(nearM))) + ","
+                + (batteryPct >= 0 ? String.valueOf(batteryPct) : "") + "\r\n";
         try (OutputStream os = cr.openOutputStream(uri, "wa")) {
             if (os == null) throw new Exception("เปิดไฟล์บันทึกไม่ได้");
             if (fresh) {
