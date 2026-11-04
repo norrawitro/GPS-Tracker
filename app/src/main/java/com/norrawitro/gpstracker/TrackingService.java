@@ -49,6 +49,7 @@ public class TrackingService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private PowerManager.WakeLock wake;
+    private WherePopup popup;
     private boolean fixing;
 
     public interface FixCallback { void onFix(Location loc, String error); }
@@ -99,6 +100,8 @@ public class TrackingService extends Service {
             o.put("pending", p.getString("pending", null) != null ? new JSONObject(p.getString("pending", "{}")) : JSONObject.NULL);
             o.put("places", new PlacesDb(c).count());
             o.put("permission", hasLocationPermission(c));
+            o.put("overlay", WherePopup.allowed(c));
+            o.put("notifications", c.getSystemService(NotificationManager.class).areNotificationsEnabled());
         } catch (Exception ignored) {}
         return o;
     }
@@ -115,7 +118,10 @@ public class TrackingService extends Service {
         cancelAlarm(c);
         c.getSystemService(NotificationManager.class).cancel(NOTIF_ASK);
         TrackingService s = instance;
-        if (s != null) s.stopSelf();
+        if (s != null) {
+            if (s.popup != null) s.popup.hide();
+            s.stopSelf();
+        }
         MainActivity.push(c);
     }
 
@@ -123,6 +129,7 @@ public class TrackingService extends Service {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        popup = new WherePopup(this);
         ensureChannels(this);
         startAsForeground();
     }
@@ -130,6 +137,7 @@ public class TrackingService extends Service {
     @Override
     public void onDestroy() {
         instance = null;
+        if (popup != null) popup.hide();
         cancelAlarm(this);
         releaseWake();
         super.onDestroy();
@@ -307,7 +315,13 @@ public class TrackingService extends Service {
             pend.put("lng", lng);
             p.edit().putString("pending", pend.toString()).apply();
         } catch (Exception ignored) {}
-        if (!MainActivity.askWhere(this)) showAskNotification();
+        if (!MainActivity.askWhere(this)) {
+            // Rule 12 while the app is in the background: a floating window over any app, plus a notification.
+            showAskNotification();
+            String detail = String.format(java.util.Locale.US, "ยังไม่มีสถานที่ที่บันทึกไว้ใกล้จุดนี้\n%.5f, %.5f · %s",
+                    lat, lng, TrackLog.stamp(at).substring(11, 16));
+            popup.show(detail, this::answer);
+        }
     }
 
     /** Rule 13/14: the person named the place, or closed the prompt without a name. */
@@ -315,6 +329,7 @@ public class TrackingService extends Service {
         SharedPreferences p = prefs(this);
         String raw = p.getString("pending", null);
         getSystemService(NotificationManager.class).cancel(NOTIF_ASK);
+        if (popup != null) popup.hide();
         if (raw == null) return;
         try {
             JSONObject pend = new JSONObject(raw);

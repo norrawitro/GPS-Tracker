@@ -35,6 +35,13 @@
     $("b1t").textContent = on ? "หยุดบันทึก" : "เริ่มบันทึก";
     $("b1d").textContent = on ? "หยุดจับพิกัดและการทำงานเบื้องหลัง" : "เริ่มจับพิกัดตามความถี่ที่ตั้งไว้";
     $("permCard").hidden = s.permission !== false || on;
+    const needPopup = s.overlay === false, needNotif = s.notifications === false;
+    $("popupCard").hidden = !(needPopup || needNotif);
+    $("popupAllow").hidden = !needPopup; $("notifAllow").hidden = !needNotif;
+    $("popupText").textContent = needNotif && !needPopup ? "การแจ้งเตือนของแอปถูกปิดอยู่ ถ้าแอปอยู่เบื้องหลังจะไม่รู้ว่ามีคำถาม \"คุณอยู่ที่ไหน?\""
+      : "ให้แอปเด้งหน้าต่างถามชื่อสถานที่ขึ้นกลางจอได้ แม้กำลังใช้แอปอื่นอยู่ ไม่อย่างนั้นจะมีแค่การแจ้งเตือนเล็ก ๆ ด้านบน";
+    $("popupSetting").textContent = (s.overlay ? "เด้งหน้าต่างกลางจอได้แล้ว" : "ยังไม่ได้อนุญาตให้แสดงทับแอปอื่น จะเห็นแค่การแจ้งเตือน")
+      + (s.notifications === false ? " · การแจ้งเตือนถูกปิดอยู่" : "");
     if (!$("mAsk").hidden && !s.pending) $("mAsk").hidden = true;
   }
   handlers.state = s => {
@@ -61,6 +68,8 @@
     A.toggle();
   });
   $("openSettings").addEventListener("click", () => A && A.openAppSettings());
+  ["popupAllow", "popupAllow2"].forEach(id => $(id).addEventListener("click", () => A && A.openOverlaySettings && A.openOverlaySettings()));
+  ["notifAllow", "notifAllow2"].forEach(id => $(id).addEventListener("click", () => A && A.openNotificationSettings && A.openNotificationSettings()));
 
   // ---------- button 2 ----------
   $("b2").addEventListener("click", () => {

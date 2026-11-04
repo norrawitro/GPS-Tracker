@@ -300,6 +300,27 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** "Display over other apps" setting, needed for the floating "คุณอยู่ที่ไหน?" window. */
+        @JavascriptInterface
+        public void openOverlaySettings() {
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openNotificationSettings() {
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                } catch (Exception ignored) {}
+            });
+        }
+
         @JavascriptInterface
         public void openAppSettings() {
             main.post(() -> {
