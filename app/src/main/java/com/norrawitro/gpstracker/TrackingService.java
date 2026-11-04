@@ -92,6 +92,8 @@ public class TrackingService extends Service {
             o.put("lastLat", Double.longBitsToDouble(p.getLong("lastLat", 0)));
             o.put("lastLng", Double.longBitsToDouble(p.getLong("lastLng", 0)));
             o.put("lastPlace", p.getString("lastPlace", ""));
+            o.put("nearName", p.getString("nearName", ""));
+            o.put("nearM", p.getLong("nearM", -1));
             o.put("nextAt", p.getLong("nextAt", 0));
             o.put("lastError", p.getString("lastError", ""));
             o.put("pending", p.getString("pending", null) != null ? new JSONObject(p.getString("pending", "{}")) : JSONObject.NULL);
@@ -348,7 +350,12 @@ public class TrackingService extends Service {
     private void write(long at, double lat, double lng, String place) {
         io.execute(() -> {
             try {
-                TrackLog.append(this, at, lat, lng, place);
+                PlacesDb.Place near = new PlacesDb(this).nearest(lat, lng);
+                TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM);
+                SharedPreferences.Editor e = prefs(this).edit();
+                if (near == null) e.remove("nearName").remove("nearM");
+                else e.putString("nearName", near.name).putLong("nearM", Math.round(near.distanceM));
+                e.apply();
             } catch (Exception e) {
                 prefs(this).edit().putString("lastError", "เขียนไฟล์ไม่สำเร็จ: " + e.getMessage()).apply();
             }

@@ -85,7 +85,12 @@ table{border-collapse:collapse;width:100%;font-size:.86rem}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font:600 .78rem var(--f-display);color:var(--muted);background:var(--bg);position:sticky;top:0}
 td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-td.place{white-space:normal;min-width:8em;font-weight:600}
+td.place{white-space:normal;min-width:6em;font-weight:600;overflow-wrap:anywhere}
+td.when .t{display:block;font-weight:600}
+td.pos span{display:block}
+td.place .near{display:block;font-weight:400;font-size:.76rem;color:var(--muted)}
+td.when .dd{display:block;font-size:.74rem;color:var(--muted)}
+th,td{padding:8px 8px}
 tr:last-child td{border-bottom:0}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 
@@ -117,6 +122,7 @@ tr:last-child td{border-bottom:0}
       <div class="kv"><span class="label">เวลา</span><b id="lastAt">-</b></div>
       <div class="kv"><span class="label">สถานที่ล่าสุด</span><b id="lastPlace">-</b></div>
       <div class="kv"><span class="label">จับครั้งถัดไป</span><b id="nextAt">-</b></div>
+      <div class="kv" style="grid-column:1/-1"><span class="label">ใกล้สถานที่ที่เคยบันทึก</span><b id="nearText">-</b></div>
     </div>
     <p class="err" id="errText" hidden></p>
     <p class="small muted" id="placesText"></p>
@@ -149,7 +155,7 @@ tr:last-child td{border-bottom:0}
     </div>
     <div><h2 id="fileName">-</h2><p class="small muted mono" id="fileFolder"></p></div>
     <p class="small muted" id="fileSummary"></p>
-    <div class="tablewrap"><table><thead><tr><th>วันเวลา</th><th>ละติจูด</th><th>ลองจิจูด</th><th>ชื่อสถานที่</th></tr></thead><tbody id="fileRows"></tbody></table></div>
+    <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>ละติจูด / ลองจิจูด</th><th>สถานที่</th></tr></thead><tbody id="fileRows"></tbody></table></div>
   </section>
 
   <!-- SETTINGS (button 4) -->

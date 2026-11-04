@@ -64,6 +64,20 @@ public class PlacesDb extends SQLiteOpenHelper {
         return best;
     }
 
+    /** The closest saved place at any distance, or null when none are saved. */
+    public Place nearest(double lat, double lng) {
+        Place best = null;
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT name, lat, lng, radius_m FROM places", null)) {
+            while (c.moveToNext()) {
+                double d = distanceM(lat, lng, c.getDouble(1), c.getDouble(2));
+                if (best == null || d < best.distanceM) {
+                    best = new Place(c.getString(0), c.getDouble(1), c.getDouble(2), c.getDouble(3), d);
+                }
+            }
+        }
+        return best;
+    }
+
     /** Great-circle distance in metres (haversine). */
     public static double distanceM(double lat1, double lng1, double lat2, double lng2) {
         double r = 6371008.8;

@@ -27,6 +27,7 @@
     $("lastPos").textContent = s.lastAt ? `${(+s.lastLat).toFixed(5)}, ${(+s.lastLng).toFixed(5)}` : "-";
     $("lastAt").textContent = s.lastAt ? fmt(s.lastAt) : "-";
     $("lastPlace").textContent = s.lastPlace || "-";
+    $("nearText").textContent = s.nearName && s.nearM >= 0 ? `ใกล้ ${s.nearName} ${Number(s.nearM).toLocaleString("th-TH")} เมตร` : "-";
     $("nextAt").textContent = on && s.nextAt ? hm(s.nextAt) : on ? "กำลังจับพิกัด…" : "-";
     $("errText").hidden = !s.lastError; $("errText").textContent = s.lastError || "";
     $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง`;
@@ -133,8 +134,10 @@
     const rows = r.rows || [];
     const named = rows.filter(x => (x[3] || "").trim()).length;
     $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง` : "ไฟล์นี้ยังไม่มีข้อมูล";
-    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num">${esc(x[0])}</td><td class="num">${esc(x[1])}</td><td class="num">${esc(x[2])}</td><td class="place">${esc(x[3] || "")}</td></tr>`).join("")
-      || '<tr><td colspan="4" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
+    // Date above time, so the whole row fits a phone screen without scrolling sideways.
+    const when = v => { const [d, t] = String(v || "").split(" "); return t ? `<span class="t">${esc(t)}</span><span class="dd">${esc(d)}</span>` : esc(v); };
+    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}</td></tr>`).join("")
+      || '<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
   };
   $("backFiles").addEventListener("click", () => showView("vFiles"));
   $("shareFile").addEventListener("click", () => { if (A && current) A.shareFile(String(current.id), current.name); });
