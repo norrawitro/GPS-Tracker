@@ -125,7 +125,7 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
       <span class="small muted" id="intervalText">ทุก 10 นาที</span>
     </div>
     <div class="field">
-      <div class="row" style="justify-content:space-between"><span class="label">ครั้งที่บันทึกก่อนตรวจชื่อสถานที่</span><b class="mono" id="countText">0/6</b></div>
+      <div class="row" style="justify-content:space-between"><span class="label">อยู่ที่เดิมที่ยังไม่มีชื่อ ติดกัน</span><b class="mono" id="countText">0/6</b></div>
       <div class="meter"><span id="meter" style="width:0%"></span></div>
     </div>
     <div class="grid">
@@ -201,14 +201,14 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
       </select>
     </div>
     <div class="field">
-      <label for="sCheck">บันทึกกี่ครั้ง จึงตรวจชื่อสถานที่</label>
+      <label for="sCheck">ถามชื่อสถานที่เมื่ออยู่ที่เดิมติดกันกี่ครั้ง</label>
       <input type="number" id="sCheck" min="1" max="999" step="1" inputmode="numeric" value="6">
       <span class="hint" id="checkHint"></span>
     </div>
     <div class="field">
       <label for="sRadius">รัศมีจับคู่สถานที่ (เมตร)</label>
       <input type="number" id="sRadius" min="5" max="50000" step="5" inputmode="numeric" value="100">
-      <span class="hint">ถ้าอยู่ห่างจากจุดที่เคยตั้งชื่อไม่เกินระยะนี้ จะใช้ชื่อเดิมโดยไม่ถาม ใช้กับจุดที่ตั้งชื่อใหม่จากนี้ไป</span>
+      <span class="hint">ถ้าอยู่ห่างจากจุดที่เคยตั้งชื่อไม่เกินระยะนี้ จะใช้ชื่อเดิมโดยไม่ถาม และใช้ตัดสินว่ายังอยู่ที่เดิมหรือเคลื่อนที่ไปแล้ว</span>
     </div>
     <div class="row"><button class="btn primary" id="sSave" type="button">บันทึกการตั้งค่า</button></div>
     <p class="status-line" id="sStatus"></p>

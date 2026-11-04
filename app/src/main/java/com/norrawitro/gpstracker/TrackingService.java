@@ -110,7 +110,8 @@ public class TrackingService extends Service {
     // ---------- start / stop ----------
 
     static void start(Context c) {
-        prefs(c).edit().putBoolean("recording", true).putInt("count", 0).remove("pending").remove("lastError").apply();
+        prefs(c).edit().putBoolean("recording", true).putInt("count", 0).remove("pending").remove("lastError")
+                .remove("anchorLat").remove("anchorLng").apply();
         c.startForegroundService(new Intent(c, TrackingService.class).setAction(ACTION_START));
     }
 
@@ -290,23 +291,41 @@ public class TrackingService extends Service {
         });
     }
 
+    /**
+     * Every fix is matched against the saved places: inside one's radius, the row gets that name.
+     * Outside all of them, the app counts how many fixes in a row stayed within the radius of where this
+     * stop began; once that reaches the set number, it asks "คุณอยู่ที่ไหน?". Moving on starts the count again,
+     * so nothing is asked while travelling.
+     */
     private void onFix(long at, double lat, double lng) {
         SharedPreferences p = prefs(this);
-        int count = p.getInt("count", 0) + 1;
-        p.edit().putInt("count", count).putLong("lastAt", at)
+        p.edit().putLong("lastAt", at)
                 .putLong("lastLat", Double.doubleToRawLongBits(lat)).putLong("lastLng", Double.doubleToRawLongBits(lng))
                 .remove("lastError").apply();
 
-        boolean askingAlready = p.getString("pending", null) != null;
-        if (count < checkEvery(this) || askingAlready) {
-            write(at, lat, lng, "");
-            return;
-        }
-        // Rule 10-12: compare with every saved place.
         PlacesDb.Place near = new PlacesDb(this).nearestWithin(lat, lng);
         if (near != null) {
             write(at, lat, lng, near.name);
-            p.edit().putInt("count", 0).putString("lastPlace", near.name).apply();
+            p.edit().putInt("count", 0).remove("anchorLat").remove("anchorLng").putString("lastPlace", near.name).apply();
+            return;
+        }
+        if (p.getString("pending", null) != null) { // already asking about this stop
+            write(at, lat, lng, "");
+            return;
+        }
+        // Still at the same unnamed spot, or somewhere new?
+        int count;
+        boolean hasAnchor = p.contains("anchorLat");
+        double aLat = Double.longBitsToDouble(p.getLong("anchorLat", 0)), aLng = Double.longBitsToDouble(p.getLong("anchorLng", 0));
+        if (hasAnchor && PlacesDb.distanceM(aLat, aLng, lat, lng) <= radiusM(this)) {
+            count = p.getInt("count", 0) + 1;
+        } else {
+            count = 1;
+            p.edit().putLong("anchorLat", Double.doubleToRawLongBits(lat)).putLong("anchorLng", Double.doubleToRawLongBits(lng)).apply();
+        }
+        p.edit().putInt("count", count).apply();
+        if (count < checkEvery(this)) {
+            write(at, lat, lng, "");
             return;
         }
         try {
@@ -343,7 +362,7 @@ public class TrackingService extends Service {
             }
             write(at, lat, lng, clean);
         } catch (Exception ignored) {}
-        p.edit().remove("pending").putInt("count", 0).apply();
+        p.edit().remove("pending").putInt("count", 0).remove("anchorLat").remove("anchorLng").apply();
         refresh();
     }
 
