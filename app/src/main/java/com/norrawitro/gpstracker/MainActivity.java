@@ -35,6 +35,8 @@ public class MainActivity extends Activity {
     private static volatile MainActivity visible;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    /** Network work (update check and download) runs apart, so a slow connection never holds up reading files. */
+    private final ExecutorService net = Executors.newSingleThreadExecutor();
     private WebView web;
     private boolean pageReady;
     /** True while the app password has not been entered since the app was last opened. */
@@ -268,7 +270,7 @@ public class MainActivity extends Activity {
             if (locked) return;
             io.execute(() -> {
                 try { emit("files", TrackLog.list(MainActivity.this).toString()); }
-                catch (Exception e) { emit("files", "[]"); }
+                catch (Throwable e) { emit("filesError", JSONObject.quote(String.valueOf(e.getMessage()))); }
             });
         }
 
@@ -338,7 +340,7 @@ public class MainActivity extends Activity {
         /** Asks GitHub Releases for a newer version. Answers with the "update" event. */
         @JavascriptInterface
         public void checkUpdate() {
-            io.execute(() -> {
+            net.execute(() -> {
                 try { emit("update", Updater.check().toString()); }
                 catch (Exception e) { emit("update", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
             });
@@ -346,7 +348,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void installUpdate(String url) {
-            io.execute(() -> {
+            net.execute(() -> {
                 try {
                     java.io.File apk = Updater.download(MainActivity.this, url, pct -> emit("updateProgress", String.valueOf(pct)));
                     emit("updateProgress", "100");

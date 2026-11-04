@@ -98,6 +98,11 @@ tr:last-child td{border-bottom:0}
 .dialog{background:var(--surface);color:var(--ink);border-radius:18px;padding:18px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
 .dialog .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .x{border:0;background:none;color:var(--muted);font:600 1.4rem/1 var(--f-display);cursor:pointer;padding:4px 8px}
+/* Files and settings open as a full-screen sheet over the main screen. */
+#vFiles,#vFile,#vSettings{position:fixed;inset:0;z-index:40;border-radius:0;border:0;overflow-y:auto;
+  padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body.sheet-open{overflow:hidden}
 .card.warnc{border-color:var(--warn)}
 .card.upd{border-color:var(--accent);background:var(--accent-soft);padding:12px 14px}
 .lock{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
@@ -162,7 +167,7 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
 
   <!-- FILES (button 3) -->
   <section id="vFiles" class="card" hidden>
-    <div class="row" style="justify-content:space-between"><h2>ไฟล์บันทึกเส้นทาง</h2><button class="btn" id="refreshFiles" type="button">โหลดใหม่</button></div>
+    <div class="row" style="justify-content:space-between"><h2>ไฟล์บันทึกเส้นทาง</h2><div class="row"><button class="btn" id="refreshFiles" type="button">โหลดใหม่</button><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div></div>
     <p class="small muted">เก็บไว้ในเครื่องที่ <span class="mono">Documents/GPS-Track/ปี/เดือน/วัน/</span></p>
     <div class="tree" id="fileTree"></div>
   </section>
@@ -179,7 +184,7 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
 
   <!-- SETTINGS (button 4) -->
   <section id="vSettings" class="card" hidden>
-    <h2>ตั้งค่า</h2>
+    <div class="row" style="justify-content:space-between"><h2>ตั้งค่า</h2><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div>
     <div class="field">
       <label for="sInterval">ความถี่การบันทึกตำแหน่ง GPS</label>
       <select id="sInterval">
