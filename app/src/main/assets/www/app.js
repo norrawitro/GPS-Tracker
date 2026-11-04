@@ -172,6 +172,8 @@
   handlers.update = u => {
     $("checkUpd").disabled = false;
     if (!u) return;
+    $("updBanner").hidden = !(u.available && u.url);
+    if (u.available) { $("bannerVer").textContent = u.latest; }
     if (u.error) { $("updState").textContent = "ตรวจหาอัปเดตไม่สำเร็จ: " + u.error; $("updNow").disabled = false; $("updNow").textContent = "อัปเดตเลย"; return; }
     if (u.available) {
       latest = u;
@@ -181,13 +183,20 @@
       $("updState").textContent = u.message || "เป็นเวอร์ชันล่าสุดแล้ว";
     }
   };
-  $("updNow").addEventListener("click", () => {
+  function startInstall() {
     if (!A || !latest || !latest.url) return;
     $("updNow").disabled = true; $("updNow").textContent = "กำลังดาวน์โหลด…";
+    $("bannerBtn").disabled = true; $("bannerState").textContent = "กำลังดาวน์โหลด…";
     A.installUpdate(latest.url);
-  });
+  }
+  $("updNow").addEventListener("click", startInstall);
+  $("bannerBtn").addEventListener("click", startInstall);
+  // Check for a new version every time the app opens; Android still asks before installing.
+  if (A && A.checkUpdate) A.checkUpdate();
   handlers.updateProgress = pct => {
     $("updNow").textContent = pct < 100 ? `กำลังดาวน์โหลด ${pct}%` : "ติดตั้ง";
+    $("bannerState").textContent = pct < 100 ? `กำลังดาวน์โหลด ${pct}%` : "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา";
+    if (pct >= 100) $("bannerBtn").disabled = false;
     if (pct >= 100) { $("updNow").disabled = false; $("updState").textContent = "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา"; }
   };
 

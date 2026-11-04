@@ -98,6 +98,7 @@ tr:last-child td{border-bottom:0}
 .dialog{background:var(--surface);color:var(--ink);border-radius:18px;padding:18px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
 .dialog .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .x{border:0;background:none;color:var(--muted);font:600 1.4rem/1 var(--f-display);cursor:pointer;padding:4px 8px}
+.card.upd{border-color:var(--accent);background:var(--accent-soft);padding:12px 14px}
 .sep{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.9rem;max-width:calc(100% - 32px)}
 </style>
@@ -134,6 +135,13 @@ tr:last-child td{border-bottom:0}
     <button class="big" id="b2" type="button"><span class="n">ปุ่ม 2</span><span class="t">บันทึกชื่อสถานที่</span><span class="d">ตั้งชื่อจุดที่อยู่ตอนนี้</span></button>
     <button class="big" id="b3" type="button"><span class="n">ปุ่ม 3</span><span class="t">ไฟล์บันทึก</span><span class="d">ดูเส้นทางแต่ละวัน</span></button>
     <button class="big" id="b4" type="button"><span class="n">ปุ่ม 4</span><span class="t">ตั้งค่า</span><span class="d">ความถี่ จำนวนครั้ง รัศมี</span></button>
+  </div>
+
+  <div class="card upd" id="updBanner" hidden>
+    <div class="row" style="justify-content:space-between">
+      <p class="small"><b>มีเวอร์ชันใหม่ <span id="bannerVer"></span></b><br><span class="muted" id="bannerState">กดเพื่อดาวน์โหลดและติดตั้ง</span></p>
+      <button class="btn primary" id="bannerBtn" type="button">อัปเดตเลย</button>
+    </div>
   </div>
 
   <div class="card" id="permCard" hidden>
