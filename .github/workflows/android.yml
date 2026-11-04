@@ -28,16 +28,18 @@ jobs:
       - name: Load signing key
         env:
           KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          # Optional second half, for phones that cannot paste more than 2000 characters at once.
+          KEYSTORE_B64_2: ${{ secrets.SIGNING_KEYSTORE_BASE64_2 }}
           STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
             # Phones often add spaces or line breaks when pasting long text; drop them before decoding.
-            clean=$(printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n\t')
+            clean=$(printf '%s%s' "$KEYSTORE_B64" "$KEYSTORE_B64_2" | tr -d ' \r\n\t')
             ks="$RUNNER_TEMP/release.keystore"
             printf '%s' "$clean" | base64 -d > "$ks" 2>/dev/null || true
-            echo "SIGNING_KEYSTORE_BASE64 has ${#clean} characters, decoded to $(stat -c %s "$ks") bytes."
+            echo "Signing key text has ${#clean} characters (both parts together), decoded to $(stat -c %s "$ks") bytes."
             if ! keytool -list -keystore "$ks" -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
-              echo "::error::The signing key could not be opened. SIGNING_KEYSTORE_BASE64 has ${#clean} characters: check that the whole text was pasted (the N-assistant key is 3544 characters and ends with ==), and that SIGNING_STORE_PASSWORD matches it."
+              echo "::error::The signing key could not be opened. SIGNING_KEYSTORE_BASE64 + SIGNING_KEYSTORE_BASE64_2 have ${#clean} characters together: check that both parts were pasted in full (the N-assistant key is 3544 characters and ends with ==), and that SIGNING_STORE_PASSWORD matches it."
               exit 1
             fi
             echo "SIGNING_KEYSTORE_PATH=$ks" >> "$GITHUB_ENV"

@@ -41,3 +41,4 @@
 
 - GitHub Actions build APK ทุก PR และทุก push เข้า `main` จะสร้าง Release `v1.0.<เลขรอบ>`
 - ต้องมี secrets `SIGNING_KEYSTORE_BASE64` และ `SIGNING_STORE_PASSWORD` (ใช้กุญแจชุดเดียวกับ N-assistant ได้)
+- ถ้ามือถือวางข้อความได้ไม่เกิน 2,000 ตัวอักษร ให้แบ่งกุญแจเป็น 2 ส่วน ใส่ส่วนแรกใน `SIGNING_KEYSTORE_BASE64` และส่วนที่เหลือใน `SIGNING_KEYSTORE_BASE64_2` แล้ว build จะต่อให้เอง
