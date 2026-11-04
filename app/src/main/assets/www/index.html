@@ -169,6 +169,10 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
   <section id="vFiles" class="card" hidden>
     <div class="row" style="justify-content:space-between"><h2>ไฟล์บันทึกเส้นทาง</h2><div class="row"><button class="btn" id="refreshFiles" type="button">โหลดใหม่</button><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div></div>
     <p class="small muted">เก็บไว้ในเครื่องที่ <span class="mono">Documents/GPS-Track/ปี/เดือน/วัน/</span></p>
+    <div class="card upd" id="folderHint" hidden>
+      <p class="small">ไฟล์จากแอปที่เคยติดตั้งไว้ก่อนหน้าจะไม่ขึ้นในรายการ จนกว่าจะให้สิทธิ์อ่านโฟลเดอร์ <span class="mono">Documents/GPS-Track</span> (ทำครั้งเดียว)</p>
+      <div class="row"><button class="btn primary" id="pickFolder" type="button">แสดงไฟล์เก่าด้วย</button></div>
+    </div>
     <div class="tree" id="fileTree"></div>
   </section>
 

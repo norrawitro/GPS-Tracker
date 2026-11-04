@@ -116,21 +116,24 @@ public final class TrackLog {
     }
 
     /** Rows of one file (header and BOM removed): [[time, lat, lng, place], ...]. */
-    /** Rows of several files of the same day, in the order given. */
+    /** Rows of several files of the same day. Ids are MediaStore numbers or document URIs, joined with "|". */
     public static JSONArray readAll(Context c, String ids) throws Exception {
         JSONArray rows = new JSONArray();
-        for (String part : ids.split(",")) {
+        for (String part : ids.split("\\|")) {
             String id = part.trim();
             if (id.isEmpty()) continue;
-            JSONArray one = read(c, Long.parseLong(id));
+            JSONArray one = id.startsWith("content:") ? readUri(c, Uri.parse(id)) : read(c, Long.parseLong(id));
             for (int i = 0; i < one.length(); i++) rows.put(one.get(i));
         }
         return rows;
     }
 
     public static JSONArray read(Context c, long id) throws Exception {
+        return readUri(c, ContentUris.withAppendedId(FILES, id));
+    }
+
+    public static JSONArray readUri(Context c, Uri uri) throws Exception {
         JSONArray rows = new JSONArray();
-        Uri uri = ContentUris.withAppendedId(FILES, id);
         try (InputStream in = c.getContentResolver().openInputStream(uri)) {
             if (in == null) throw new Exception("เปิดไฟล์ไม่ได้");
             BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));

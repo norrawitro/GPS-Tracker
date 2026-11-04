@@ -30,6 +30,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int REQ_LOCATION = 9001;
+    private static final int REQ_FOLDER = 9002;
     private static final String START_URL = "https://appassets.androidplatform.net/assets/www/index.html";
 
     private static volatile MainActivity visible;
@@ -160,6 +161,20 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FOLDER) return;
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                FolderAccess.save(this, data.getData());
+                emit("folderPicked", "true");
+            } catch (Exception e) {
+                emit("warn", JSONObject.quote("ใช้โฟลเดอร์นี้ไม่ได้ ลองเลือกโฟลเดอร์ GPS-Track อีกครั้ง"));
+            }
+        }
+    }
+
+    @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode != REQ_LOCATION) return;
@@ -265,11 +280,29 @@ public class MainActivity extends Activity {
             emitState();
         }
 
+        /** Lets the person pick Documents/GPS-Track once, so files from an earlier install can be read too. */
+        @JavascriptInterface
+        public void pickFolder() {
+            if (locked) return;
+            main.post(() -> {
+                try { startActivityForResult(FolderAccess.pickIntent(), REQ_FOLDER); }
+                catch (Exception e) { emit("warn", JSONObject.quote("เปิดหน้าเลือกโฟลเดอร์ไม่ได้")); }
+            });
+        }
+
+        @JavascriptInterface
+        public boolean hasFolder() {
+            return FolderAccess.tree(MainActivity.this) != null;
+        }
+
         @JavascriptInterface
         public void listFiles() {
             if (locked) return;
             io.execute(() -> {
-                try { emit("files", TrackLog.list(MainActivity.this).toString()); }
+                try {
+                    Uri tree = FolderAccess.tree(MainActivity.this);
+                    emit("files", (tree != null ? FolderAccess.list(MainActivity.this, tree) : TrackLog.list(MainActivity.this)).toString());
+                }
                 catch (Throwable e) { emit("filesError", JSONObject.quote(String.valueOf(e.getMessage()))); }
             });
         }
@@ -294,7 +327,9 @@ public class MainActivity extends Activity {
         public void shareFile(String id, String name) {
             if (locked) return;
             main.post(() -> {
-                Uri uri = Uri.withAppendedPath(MediaStore.Files.getContentUri("external"), id.split(",")[0].trim());
+                String first = id.split("\\|")[0].trim();
+                Uri uri = first.startsWith("content:") ? Uri.parse(first)
+                        : Uri.withAppendedPath(MediaStore.Files.getContentUri("external"), first);
                 Intent send = new Intent(Intent.ACTION_SEND).setType("text/csv")
                         .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, name)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
