@@ -82,9 +82,15 @@ public final class TrackLog {
         }
     }
 
+    /**
+     * This app's file for that day. When a same-named file belongs to an earlier install, Android names
+     * ours "YYYY-MM-DD-track (1).csv", so match the date prefix and keep appending to the oldest one.
+     */
     private static Uri find(ContentResolver cr, String folder, String name) {
-        String sel = MediaStore.MediaColumns.RELATIVE_PATH + "=? AND " + MediaStore.MediaColumns.DISPLAY_NAME + "=?";
-        try (Cursor cur = cr.query(FILES, new String[]{MediaStore.MediaColumns._ID}, sel, new String[]{folder, name}, null)) {
+        String prefix = name.substring(0, name.length() - ".csv".length());
+        String sel = MediaStore.MediaColumns.RELATIVE_PATH + "=? AND " + MediaStore.MediaColumns.DISPLAY_NAME + " LIKE ?";
+        try (Cursor cur = cr.query(FILES, new String[]{MediaStore.MediaColumns._ID}, sel, new String[]{folder, prefix + "%.csv"},
+                MediaStore.MediaColumns._ID + " ASC")) {
             if (cur != null && cur.moveToFirst()) return ContentUris.withAppendedId(FILES, cur.getLong(0));
         }
         return null;
@@ -95,7 +101,7 @@ public final class TrackLog {
         JSONArray out = new JSONArray();
         String sel = MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? AND " + MediaStore.MediaColumns.DISPLAY_NAME + " LIKE ?";
         String[] proj = {MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.SIZE};
-        try (Cursor cur = c.getContentResolver().query(FILES, proj, sel, new String[]{ROOT + "%", "%-track.csv"},
+        try (Cursor cur = c.getContentResolver().query(FILES, proj, sel, new String[]{ROOT + "%", "%-track%.csv"},
                 MediaStore.MediaColumns.DISPLAY_NAME + " DESC")) {
             while (cur != null && cur.moveToNext()) {
                 JSONObject o = new JSONObject();
@@ -110,6 +116,18 @@ public final class TrackLog {
     }
 
     /** Rows of one file (header and BOM removed): [[time, lat, lng, place], ...]. */
+    /** Rows of several files of the same day, in the order given. */
+    public static JSONArray readAll(Context c, String ids) throws Exception {
+        JSONArray rows = new JSONArray();
+        for (String part : ids.split(",")) {
+            String id = part.trim();
+            if (id.isEmpty()) continue;
+            JSONArray one = read(c, Long.parseLong(id));
+            for (int i = 0; i < one.length(); i++) rows.put(one.get(i));
+        }
+        return rows;
+    }
+
     public static JSONArray read(Context c, long id) throws Exception {
         JSONArray rows = new JSONArray();
         Uri uri = ContentUris.withAppendedId(FILES, id);

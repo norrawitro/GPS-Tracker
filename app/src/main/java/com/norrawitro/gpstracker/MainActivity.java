@@ -281,7 +281,7 @@ public class MainActivity extends Activity {
                 try {
                     JSONObject o = new JSONObject();
                     o.put("id", id);
-                    o.put("rows", TrackLog.read(MainActivity.this, Long.parseLong(id)));
+                    o.put("rows", TrackLog.readAll(MainActivity.this, id));
                     emit("file", o.toString());
                 } catch (Exception e) {
                     emit("file", "{\"id\":" + JSONObject.quote(id) + ",\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}");
@@ -294,7 +294,7 @@ public class MainActivity extends Activity {
         public void shareFile(String id, String name) {
             if (locked) return;
             main.post(() -> {
-                Uri uri = Uri.withAppendedPath(MediaStore.Files.getContentUri("external"), id);
+                Uri uri = Uri.withAppendedPath(MediaStore.Files.getContentUri("external"), id.split(",")[0].trim());
                 Intent send = new Intent(Intent.ACTION_SEND).setType("text/csv")
                         .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, name)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

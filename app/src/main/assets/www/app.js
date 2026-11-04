@@ -125,7 +125,15 @@
   handlers.filesError = msg => { clearTimeout(filesTimer); $("fileTree").innerHTML = `<div class="empty">อ่านรายการไฟล์ไม่ได้: ${esc(msg)}</div>`; };
   handlers.files = list => {
     clearTimeout(filesTimer);
-    files = Array.isArray(list) ? list : [];
+    // One entry per day: an earlier install can leave a day split over "…-track.csv", "…-track (1).csv", …
+    const byDay = {};
+    for (const f of (Array.isArray(list) ? list : [])) {
+      const day = String(f.name).slice(0, 10);
+      const e = byDay[day] || (byDay[day] = { id: "", ids: [], name: day + "-track.csv", folder: f.folder, size: 0 });
+      e.ids.push(f.id); e.size += +f.size || 0;
+    }
+    files = Object.values(byDay).map(e => { e.ids.sort((x, y) => x - y); e.id = e.ids.join(","); return e; })
+      .sort((x, y) => y.name.localeCompare(x.name));
     if (!files.length) { $("fileTree").innerHTML = '<div class="empty">ยังไม่มีข้อมูลการเดินทาง</div>'; return; }
     const groups = {};
     for (const f of files) {
@@ -152,7 +160,9 @@
   handlers.file = r => {
     if (!current || String(r.id) !== String(current.id)) return;
     if (r.error) { $("fileSummary").textContent = "เปิดไฟล์ไม่ได้: " + r.error; return; }
-    const rows = r.rows || [];
+    // Rows from split files, oldest first by their dd-MM-yyyy HH:mm:ss time.
+    const key = t => { const m = String(t || "").match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}:\d{2}:\d{2})/); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}` : String(t); };
+    const rows = (r.rows || []).slice().sort((x, y) => key(x[0]).localeCompare(key(y[0])));
     const named = rows.filter(x => (x[3] || "").trim()).length;
     $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง` : "ไฟล์นี้ยังไม่มีข้อมูล";
     // Date above time, so the whole row fits a phone screen without scrolling sideways.
