@@ -1,0 +1,170 @@
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const A = window.Android || null;
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const pad = n => String(n).padStart(2, "0");
+  const fmt = ms => { const d = new Date(ms); return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const hm = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const intervalLabel = m => m < 60 ? `${m} นาที` : `${m / 60} ชั่วโมง`;
+  const MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+  const handlers = {};
+  window.__native = (ev, payload) => { try { handlers[ev] && handlers[ev](payload); } catch (e) { console.error(e); } };
+
+  let state = { recording: false, count: 0, checkEvery: 6, intervalMin: 10, radiusM: 100, lastAt: 0, places: 0, permission: true };
+  let toastTimer;
+  function toast(msg) { $("toast").textContent = msg; $("toast").hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").hidden = true, 3500); }
+
+  // ---------- status ----------
+  function render() {
+    const s = state, on = !!s.recording;
+    $("statusCard").classList.toggle("on", on);
+    $("stateText").textContent = on ? "กำลังบันทึก" : "หยุดบันทึก";
+    $("intervalText").textContent = `จับพิกัดทุก ${intervalLabel(s.intervalMin)}`;
+    $("countText").textContent = `${s.count}/${s.checkEvery}`;
+    $("meter").style.width = `${Math.min(100, (s.count / Math.max(1, s.checkEvery)) * 100)}%`;
+    $("lastPos").textContent = s.lastAt ? `${(+s.lastLat).toFixed(5)}, ${(+s.lastLng).toFixed(5)}` : "-";
+    $("lastAt").textContent = s.lastAt ? fmt(s.lastAt) : "-";
+    $("lastPlace").textContent = s.lastPlace || "-";
+    $("nearText").textContent = s.nearName && s.nearM >= 0 ? `ใกล้ ${s.nearName} ${Number(s.nearM).toLocaleString("th-TH")} เมตร` : "-";
+    $("nextAt").textContent = on && s.nextAt ? hm(s.nextAt) : on ? "กำลังจับพิกัด…" : "-";
+    $("errText").hidden = !s.lastError; $("errText").textContent = s.lastError || "";
+    $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง`;
+    $("b1").classList.toggle("primary", !on); $("b1").classList.toggle("stop", on);
+    $("b1t").textContent = on ? "หยุดบันทึก" : "เริ่มบันทึก";
+    $("b1d").textContent = on ? "หยุดจับพิกัดและการทำงานเบื้องหลัง" : "เริ่มจับพิกัดตามความถี่ที่ตั้งไว้";
+    $("permCard").hidden = s.permission !== false || on;
+    if (!$("mAsk").hidden && !s.pending) $("mAsk").hidden = true;
+  }
+  handlers.state = s => { state = { ...state, ...s }; render(); };
+  handlers.warn = msg => toast(msg);
+  handlers.needPermission = () => { state.permission = false; render(); };
+  function pullState() { if (A) { try { handlers.state(JSON.parse(A.state())); } catch {} } }
+
+  // ---------- views (buttons 3 and 4) ----------
+  const VIEWS = ["vFiles", "vFile", "vSettings"];
+  function showView(id) {
+    VIEWS.forEach(v => $(v).hidden = v !== id);
+    $("b3").setAttribute("aria-current", id === "vFiles" || id === "vFile" ? "page" : "false");
+    $("b4").setAttribute("aria-current", id === "vSettings" ? "page" : "false");
+    if (id) setTimeout(() => $(id).scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+  }
+
+  // ---------- button 1 ----------
+  $("b1").addEventListener("click", () => {
+    if (!A) { toast("ใช้ได้เฉพาะในแอปบนมือถือ"); return; }
+    A.toggle();
+  });
+  $("openSettings").addEventListener("click", () => A && A.openAppSettings());
+
+  // ---------- button 2 ----------
+  $("b2").addEventListener("click", () => {
+    if (!state.recording) { toast("ไม่ได้เริ่มบันทึกการเดินทาง"); return; }
+    $("placeName").value = ""; $("placeStatus").textContent = ""; $("placeSave").disabled = false;
+    $("mPlace").hidden = false; setTimeout(() => $("placeName").focus(), 50);
+  });
+  $("placeSave").addEventListener("click", () => {
+    const name = $("placeName").value.trim();
+    if (!name) { $("placeStatus").textContent = "พิมพ์ชื่อสถานที่ก่อน"; return; }
+    if (!A) { $("placeStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    $("placeSave").disabled = true; $("placeStatus").textContent = "กำลังจับพิกัด… (อาจใช้เวลาถึง 45 วินาที)";
+    A.savePlace(name);
+  });
+  handlers.placeSaved = r => {
+    $("placeSave").disabled = false;
+    if (r && r.ok) { $("mPlace").hidden = true; toast(`บันทึก "${r.name}" แล้ว`); }
+    else { $("placeStatus").textContent = (r && r.error) || "บันทึกไม่สำเร็จ"; if (r && r.error === "ไม่ได้เริ่มบันทึกการเดินทาง") { $("mPlace").hidden = true; toast(r.error); } }
+  };
+  document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => $(b.dataset.close).hidden = true));
+
+  // ---------- automatic check: "คุณอยู่ที่ไหน?" ----------
+  handlers.ask = p => {
+    if (!p) return;
+    $("askWhere").textContent = `ยังไม่มีสถานที่ที่บันทึกไว้ใกล้จุดนี้ (${(+p.lat).toFixed(5)}, ${(+p.lng).toFixed(5)} เวลา ${hm(p.at)})`;
+    if ($("mAsk").hidden) { $("askName").value = ""; $("mAsk").hidden = false; setTimeout(() => $("askName").focus(), 50); }
+  };
+  $("askSave").addEventListener("click", () => {
+    const name = $("askName").value.trim();
+    if (!name) { $("askName").focus(); return; }
+    $("mAsk").hidden = true; if (A) A.answer(name); toast(`บันทึก "${name}" แล้ว`);
+  });
+  $("askClose").addEventListener("click", () => {
+    $("mAsk").hidden = true; if (A) A.answer(""); toast("บันทึกเฉพาะวันเวลาและพิกัด");
+  });
+  [["placeName", "placeSave"], ["askName", "askSave"]].forEach(([i, b]) => $(i).addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $(b).click(); }));
+
+  // ---------- button 3: files ----------
+  let files = [], current = null;
+  $("b3").addEventListener("click", () => { showView("vFiles"); loadFiles(); });
+  $("refreshFiles").addEventListener("click", loadFiles);
+  function loadFiles() {
+    $("fileTree").innerHTML = '<p class="small muted">กำลังโหลด…</p>';
+    if (!A) { handlers.files([]); return; }
+    A.listFiles();
+  }
+  handlers.files = list => {
+    files = Array.isArray(list) ? list : [];
+    if (!files.length) { $("fileTree").innerHTML = '<div class="empty">ยังไม่มีข้อมูลการเดินทาง</div>'; return; }
+    const groups = {};
+    for (const f of files) {
+      const m = String(f.folder).match(/GPS-Track\/(\d{4})\/(\d{2})\//);
+      const key = m ? `${m[1]}-${m[2]}` : "อื่น ๆ";
+      (groups[key] = groups[key] || []).push(f);
+    }
+    $("fileTree").innerHTML = Object.keys(groups).sort().reverse().map(k => {
+      const [y, mo] = k.split("-");
+      const title = mo ? `${MONTHS[+mo - 1]} ${y}` : k;
+      return `<div class="month"><h3>${esc(title)} · ${groups[k].length} วัน</h3><div class="files">${groups[k].map(f =>
+        `<button type="button" data-file="${esc(f.id)}"><span><b>${esc(f.name)}</b><br><span class="p">${esc(f.folder)}</span></span><span class="small muted">${Math.max(1, Math.round(f.size / 1024))} KB</span></button>`).join("")}</div></div>`;
+    }).join("");
+  };
+  $("fileTree").addEventListener("click", e => {
+    const b = e.target.closest("[data-file]"); if (!b) return;
+    current = files.find(f => String(f.id) === b.dataset.file);
+    if (!current) return;
+    $("fileName").textContent = current.name; $("fileFolder").textContent = current.folder;
+    $("fileSummary").textContent = "กำลังเปิดไฟล์…"; $("fileRows").innerHTML = "";
+    showView("vFile");
+    A.readFile(String(current.id));
+  });
+  handlers.file = r => {
+    if (!current || String(r.id) !== String(current.id)) return;
+    if (r.error) { $("fileSummary").textContent = "เปิดไฟล์ไม่ได้: " + r.error; return; }
+    const rows = r.rows || [];
+    const named = rows.filter(x => (x[3] || "").trim()).length;
+    $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง` : "ไฟล์นี้ยังไม่มีข้อมูล";
+    // Date above time, so the whole row fits a phone screen without scrolling sideways.
+    const when = v => { const [d, t] = String(v || "").split(" "); return t ? `<span class="t">${esc(t)}</span><span class="dd">${esc(d)}</span>` : esc(v); };
+    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}</td></tr>`).join("")
+      || '<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
+  };
+  $("backFiles").addEventListener("click", () => showView("vFiles"));
+  $("shareFile").addEventListener("click", () => { if (A && current) A.shareFile(String(current.id), current.name); });
+
+  // ---------- button 4: settings ----------
+  $("b4").addEventListener("click", () => {
+    $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
+    updateHint(); $("sStatus").textContent = ""; showView("vSettings");
+  });
+  function updateHint() {
+    const m = +$("sInterval").value * Math.max(1, +$("sCheck").value || 1);
+    $("checkHint").textContent = `ตรวจชื่อสถานที่ทุก ${m < 60 ? m + " นาที" : (m / 60).toFixed(m % 60 ? 1 : 0) + " ชั่วโมง"} โดยประมาณ`;
+  }
+  ["sInterval", "sCheck"].forEach(id => $(id).addEventListener("input", updateHint));
+  $("sSave").addEventListener("click", () => {
+    const interval = +$("sInterval").value, check = Math.round(+$("sCheck").value), radius = Math.round(+$("sRadius").value);
+    if (!(check >= 1 && check <= 999)) { $("sStatus").textContent = "จำนวนครั้งต้องอยู่ระหว่าง 1 ถึง 999"; return; }
+    if (!(radius >= 5 && radius <= 50000)) { $("sStatus").textContent = "รัศมีต้องอยู่ระหว่าง 5 ถึง 50,000 เมตร"; return; }
+    if (A) A.setSettings(interval, check, radius);
+    state = { ...state, intervalMin: interval, checkEvery: check, radiusM: radius }; render();
+    $("sStatus").textContent = state.recording ? "บันทึกแล้ว ใช้ตั้งแต่รอบการบันทึกถัดไป" : "บันทึกแล้ว";
+  });
+
+  // ---------- clock ----------
+  function tick() { $("clock").textContent = hm(Date.now()); }
+  tick(); setInterval(tick, 10000);
+  setInterval(pullState, 30000);
+
+  pullState(); render();
+})();

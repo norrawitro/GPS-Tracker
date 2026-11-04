@@ -1,0 +1,55 @@
+plugins {
+    id "com.android.application"
+}
+
+// Every CI run gets a higher versionCode, so each release installs over the previous one.
+def buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+
+android {
+    namespace "com.norrawitro.gpstracker"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.norrawitro.gpstracker"
+        minSdk 29
+        targetSdk 35
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    // Releases are signed with the private key from GitHub secrets. Android only installs a new
+    // version over the old one when both are signed with the same key, so that key must never change.
+    // Without the secret (pull requests, local builds) the APK is signed with the debug key for testing only.
+    def keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias System.getenv("SIGNING_KEY_ALIAS") ?: "nassistant"
+                keyPassword System.getenv("SIGNING_KEY_PASSWORD") ?: System.getenv("SIGNING_STORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core:1.13.1"
+    implementation "androidx.webkit:webkit:1.12.1"
+}
