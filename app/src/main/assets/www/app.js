@@ -10,6 +10,8 @@
   const MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
   const handlers = {};
+  // Show any unexpected error instead of failing silently.
+  window.addEventListener("error", e => { try { toast("เกิดข้อผิดพลาด: " + (e.message || e)); } catch {} });
   window.__native = (ev, payload) => { try { handlers[ev] && handlers[ev](payload); } catch (e) { console.error(e); } };
 
   let state = { recording: false, count: 0, checkEvery: 6, intervalMin: 10, radiusM: 100, lastAt: 0, places: 0, permission: true };
@@ -57,6 +59,7 @@
   const VIEWS = ["vFiles", "vFile", "vSettings"];
   function showView(id) {
     VIEWS.forEach(v => $(v).hidden = v !== id);
+    document.body.classList.toggle("sheet-open", !!id);
     $("b3").setAttribute("aria-current", id === "vFiles" || id === "vFile" ? "page" : "false");
     $("b4").setAttribute("aria-current", id === "vSettings" ? "page" : "false");
     if (id) setTimeout(() => $(id).scrollIntoView({ behavior: "smooth", block: "start" }), 30);
@@ -111,12 +114,17 @@
   let files = [], current = null;
   $("b3").addEventListener("click", () => { showView("vFiles"); loadFiles(); });
   $("refreshFiles").addEventListener("click", loadFiles);
+  let filesTimer;
   function loadFiles() {
     $("fileTree").innerHTML = '<p class="small muted">กำลังโหลด…</p>';
     if (!A) { handlers.files([]); return; }
-    A.listFiles();
+    clearTimeout(filesTimer);
+    filesTimer = setTimeout(() => { $("fileTree").innerHTML = '<div class="empty">โหลดรายการไฟล์ไม่สำเร็จ กด "โหลดใหม่" อีกครั้ง</div>'; }, 10000);
+    try { A.listFiles(); } catch (e) { clearTimeout(filesTimer); $("fileTree").innerHTML = `<div class="empty">เปิดรายการไฟล์ไม่ได้: ${esc(e.message)}</div>`; }
   }
+  handlers.filesError = msg => { clearTimeout(filesTimer); $("fileTree").innerHTML = `<div class="empty">อ่านรายการไฟล์ไม่ได้: ${esc(msg)}</div>`; };
   handlers.files = list => {
+    clearTimeout(filesTimer);
     files = Array.isArray(list) ? list : [];
     if (!files.length) { $("fileTree").innerHTML = '<div class="empty">ยังไม่มีข้อมูลการเดินทาง</div>'; return; }
     const groups = {};
@@ -153,6 +161,7 @@
       || '<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
   };
   $("backFiles").addEventListener("click", () => showView("vFiles"));
+  document.querySelectorAll("[data-sheet-close]").forEach(b => b.addEventListener("click", () => showView(null)));
   $("shareFile").addEventListener("click", () => { if (A && current) A.shareFile(String(current.id), current.name); });
 
   // ---------- button 4: settings ----------
