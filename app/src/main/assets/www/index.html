@@ -99,6 +99,9 @@ tr:last-child td{border-bottom:0}
 .dialog .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .x{border:0;background:none;color:var(--muted);font:600 1.4rem/1 var(--f-display);cursor:pointer;padding:4px 8px}
 .card.upd{border-color:var(--accent);background:var(--accent-soft);padding:12px 14px}
+.lock{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.lock .dialog{box-shadow:none;border:1px solid var(--line)}
+input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .sep{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.9rem;max-width:calc(100% - 32px)}
 </style>
@@ -195,6 +198,19 @@ tr:last-child td{border-bottom:0}
     <p class="status-line" id="sStatus"></p>
     <p class="small muted">ค่าใหม่ใช้ตั้งแต่รอบการบันทึกถัดไป ข้อมูลที่บันทึกไปแล้วไม่เปลี่ยน</p>
     <hr class="sep">
+    <h3>รหัสผ่านเข้าแอป</h3>
+    <p class="small" id="pwState">ยังไม่ได้ตั้งรหัสผ่าน ใครเปิดเครื่องก็เข้าแอปได้</p>
+    <div class="field" id="pwCurField" hidden><label for="pwCur">รหัสผ่านปัจจุบัน</label><input type="password" id="pwCur" autocomplete="current-password"></div>
+    <div class="field"><label for="pwNew" id="pwNewLabel">รหัสผ่านใหม่ (อย่างน้อย 4 ตัว)</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+    <div class="field"><label for="pwNew2">ใส่รหัสผ่านใหม่อีกครั้ง</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
+    <div class="row">
+      <button class="btn primary" id="pwSave" type="button">ตั้งรหัสผ่าน</button>
+      <button class="btn" id="pwRemove" type="button" hidden>เอารหัสผ่านออก</button>
+    </div>
+    <p class="status-line" id="pwStatus"></p>
+    <p class="small muted">ถ้าลืมรหัสผ่าน ต้องล้างข้อมูลแอปในตั้งค่าเครื่อง ซึ่งจะลบสถานที่ที่จำไว้ทั้งหมด (ไฟล์ CSV ในโฟลเดอร์ Documents ยังอยู่)</p>
+
+    <hr class="sep">
     <h3>อัปเดตแอป</h3>
     <p class="small">เวอร์ชันที่ติดตั้ง <b class="mono" id="appVer">-</b></p>
     <div class="row">
@@ -228,8 +244,23 @@ tr:last-child td{border-bottom:0}
   </div>
 </div>
 
+<!-- App password -->
+<div class="lock" id="lockScreen" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="dialog">
+    <h2 id="lockTitle">ใส่รหัสผ่านเพื่อเข้าแอป</h2>
+    <p class="small muted">การบันทึกการเดินทางยังทำงานอยู่เบื้องหลังระหว่างที่แอปล็อก</p>
+    <div class="field"><label for="lockPw">รหัสผ่าน</label><input type="password" id="lockPw" autocomplete="current-password"></div>
+    <div class="row"><button class="btn primary" id="lockBtn" type="button">เข้าแอป</button></div>
+    <p class="status-line" id="lockStatus"></p>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden role="status"></div>
 
+<script>
+  // Cover the screen before anything renders when the app is locked.
+  try { if (window.Android && JSON.parse(Android.state()).locked) document.getElementById("lockScreen").hidden = false; } catch (e) {}
+</script>
 <script src="app.js"></script>
 </body>
 </html>

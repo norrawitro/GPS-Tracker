@@ -37,7 +37,11 @@
     $("permCard").hidden = s.permission !== false || on;
     if (!$("mAsk").hidden && !s.pending) $("mAsk").hidden = true;
   }
-  handlers.state = s => { state = { ...state, ...s }; render(); };
+  handlers.state = s => {
+    if (!s) return;
+    if (s.locked) { if (handlers.lock) handlers.lock({ enabled: true, locked: true }); return; }
+    state = { ...state, ...s }; render();
+  };
   handlers.warn = msg => toast(msg);
   handlers.needPermission = () => { state.permission = false; render(); };
   function pullState() { if (A) { try { handlers.state(JSON.parse(A.state())); } catch {} } }
@@ -199,6 +203,53 @@
     if (pct >= 100) $("bannerBtn").disabled = false;
     if (pct >= 100) { $("updNow").disabled = false; $("updState").textContent = "ดาวน์โหลดแล้ว กดติดตั้งในหน้าต่างที่ขึ้นมา"; }
   };
+
+  // ---------- app password ----------
+  let lockEnabled = false;
+  function renderPw() {
+    $("pwState").textContent = lockEnabled ? "ตั้งรหัสผ่านแล้ว แอปจะล็อกทุกครั้งที่ออกจากแอป" : "ยังไม่ได้ตั้งรหัสผ่าน ใครเปิดเครื่องก็เข้าแอปได้";
+    $("pwCurField").hidden = !lockEnabled; $("pwRemove").hidden = !lockEnabled;
+    $("pwSave").textContent = lockEnabled ? "เปลี่ยนรหัสผ่าน" : "ตั้งรหัสผ่าน";
+  }
+  handlers.lock = l => {
+    lockEnabled = !!(l && l.enabled); renderPw();
+    const show = !!(l && l.locked);
+    if (show && $("lockScreen").hidden) { $("lockPw").value = ""; $("lockStatus").textContent = ""; }
+    $("lockScreen").hidden = !show;
+    if (show) { $("mAsk").hidden = true; $("mPlace").hidden = true; setTimeout(() => $("lockPw").focus(), 60); }
+    else pullState();
+  };
+  $("lockBtn").addEventListener("click", () => {
+    if (!A) return;
+    $("lockBtn").disabled = true; $("lockStatus").textContent = "กำลังตรวจ…";
+    setTimeout(() => {
+      const err = A.unlock($("lockPw").value);
+      $("lockBtn").disabled = false;
+      if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
+      $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
+      pullState();
+    }, 30);
+  });
+  $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("lockBtn").click(); });
+  function savePw(remove) {
+    if (!A) { $("pwStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    const cur = $("pwCur").value, next = remove ? "" : $("pwNew").value;
+    if (!remove) {
+      if (next.length < 4) { $("pwStatus").textContent = "รหัสผ่านต้องยาวอย่างน้อย 4 ตัว"; return; }
+      if (next !== $("pwNew2").value) { $("pwStatus").textContent = "รหัสผ่านใหม่ 2 ช่องไม่ตรงกัน"; return; }
+    }
+    $("pwStatus").textContent = "กำลังบันทึก…";
+    setTimeout(() => {
+      const err = A.changePassword(cur, next);
+      if (err) { $("pwStatus").textContent = err; return; }
+      lockEnabled = !remove; renderPw();
+      ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
+      $("pwStatus").textContent = remove ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
+    }, 30);
+  }
+  $("pwSave").addEventListener("click", () => savePw(false));
+  $("pwRemove").addEventListener("click", () => savePw(true));
+  if (A && A.lockEnabled) { lockEnabled = A.lockEnabled(); renderPw(); }
 
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
