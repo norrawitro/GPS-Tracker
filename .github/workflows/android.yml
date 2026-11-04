@@ -28,10 +28,19 @@ jobs:
       - name: Load signing key
         env:
           KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            # Phones often add spaces or line breaks when pasting long text; drop them before decoding.
+            clean=$(printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n\t')
+            ks="$RUNNER_TEMP/release.keystore"
+            printf '%s' "$clean" | base64 -d > "$ks" 2>/dev/null || true
+            echo "SIGNING_KEYSTORE_BASE64 has ${#clean} characters, decoded to $(stat -c %s "$ks") bytes."
+            if ! keytool -list -keystore "$ks" -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
+              echo "::error::The signing key could not be opened. SIGNING_KEYSTORE_BASE64 has ${#clean} characters: check that the whole text was pasted (the N-assistant key is 3544 characters and ends with ==), and that SIGNING_STORE_PASSWORD matches it."
+              exit 1
+            fi
+            echo "SIGNING_KEYSTORE_PATH=$ks" >> "$GITHUB_ENV"
           elif [ "$IS_RELEASE" = "true" ]; then
             echo "::error::Add the SIGNING_KEYSTORE_BASE64 and SIGNING_STORE_PASSWORD secrets (Settings > Secrets and variables > Actions) before releasing."
             exit 1
