@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GPS Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: field-logbook look. Status card on top, four numbered buttons (2x2), views swap below. One column, max 560px. */
+:root{
+  --bg:#eef2ef; --surface:#ffffff; --ink:#15231d; --muted:#5b6b63; --line:#d3ddd7;
+  --accent:#1f6b4f; --accent-ink:#ffffff; --accent-soft:#dcefe5;
+  --rec:#c2412d; --rec-soft:#f8e1dc; --warn:#a35a00;
+  --f-display:"Bai Jamjuree","Noto Sans Thai",system-ui,sans-serif;
+  --f-body:"Noto Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101614; --surface:#18211d; --ink:#e4ece7; --muted:#97a89f; --line:#2a3731;
+  --accent:#6cc79c; --accent-ink:#0d1a14; --accent-soft:#1d3329;
+  --rec:#ff7b66; --rec-soft:#3a201b; --warn:#f0b35a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#18211d; --ink:#e4ece7; --muted:#97a89f; --line:#2a3731;
+  --accent:#6cc79c; --accent-ink:#0d1a14; --accent-soft:#1d3329;
+  --rec:#ff7b66; --rec-soft:#3a201b; --warn:#f0b35a; color-scheme:dark}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55}
+.wrap{max-width:560px;margin:0 auto;padding-block:18px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--f-display);margin:0;line-height:1.25;text-wrap:balance}
+h1{font-size:1.35rem} h2{font-size:1.15rem} h3{font-size:1rem}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:.86rem}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.status{border-width:2px}
+.status.on{border-color:var(--rec)}
+.pill{display:inline-flex;align-items:center;gap:8px;font:600 .95rem var(--f-display);padding:4px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.pill i{width:10px;height:10px;border-radius:50%;background:currentColor}
+.on .pill{background:var(--rec-soft);color:var(--rec)}
+@media (prefers-reduced-motion: no-preference){.on .pill i{animation:blink 1.4s ease-in-out infinite}@keyframes blink{50%{opacity:.25}}}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+.kv{display:flex;flex-direction:column;min-width:0}
+.kv b{font-family:var(--f-mono);font-size:.98rem;font-weight:600;overflow-wrap:anywhere}
+.meter{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.meter span{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .3s}
+.on .meter span{background:var(--rec)}
+.err{color:var(--warn);font-size:.86rem}
+
+.buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.big{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r);padding:14px;cursor:pointer;min-height:92px;font:inherit}
+.big .n{font:600 .78rem var(--f-mono);color:var(--muted)}
+.big .t{font:600 1.05rem var(--f-display)}
+.big .d{font-size:.8rem;color:var(--muted)}
+.big.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.big.primary .n,.big.primary .d{color:inherit;opacity:.8}
+.big.stop{background:var(--rec);border-color:var(--rec);color:#fff}
+.big.stop .n,.big.stop .d{color:inherit;opacity:.85}
+.big[aria-current="page"]{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:2px}
+
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 .95rem var(--f-display);padding:10px 16px;border-radius:10px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.55;cursor:wait}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:600;font-size:.95rem}
+.hint{font-size:.82rem;color:var(--muted)}
+input[type=text],input[type=number],select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.status-line{font-size:.86rem;color:var(--muted);min-height:1.2em}
+
+.tree{display:flex;flex-direction:column;gap:12px}
+.month h3{font-size:.92rem;color:var(--muted);margin-bottom:6px}
+.files{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.files button{display:flex;justify-content:space-between;gap:10px;align-items:center;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);padding:12px 14px;font:inherit;text-align:left;cursor:pointer}
+.files button:last-child{border-bottom:0}
+.files .p{font-size:.78rem;color:var(--muted);font-family:var(--f-mono);overflow-wrap:anywhere}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 .78rem var(--f-display);color:var(--muted);background:var(--bg);position:sticky;top:0}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.place{white-space:normal;min-width:8em;font-weight:600}
+tr:last-child td{border-bottom:0}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+
+.modal{position:fixed;inset:0;z-index:50;background:rgba(10,20,15,.55);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dialog{background:var(--surface);color:var(--ink);border-radius:18px;padding:18px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.dialog .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.x{border:0;background:none;color:var(--muted);font:600 1.4rem/1 var(--f-display);cursor:pointer;padding:4px 8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.9rem;max-width:calc(100% - 32px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="row" style="justify-content:space-between">
+    <h1>บันทึกการเดินทาง GPS</h1>
+    <span class="small muted mono" id="clock">--:--</span>
+  </header>
+
+  <section class="card status" id="statusCard" aria-live="polite">
+    <div class="row" style="justify-content:space-between">
+      <span class="pill" id="pill"><i></i><span id="stateText">หยุดบันทึก</span></span>
+      <span class="small muted" id="intervalText">ทุก 10 นาที</span>
+    </div>
+    <div class="field">
+      <div class="row" style="justify-content:space-between"><span class="label">ครั้งที่บันทึกก่อนตรวจชื่อสถานที่</span><b class="mono" id="countText">0/6</b></div>
+      <div class="meter"><span id="meter" style="width:0%"></span></div>
+    </div>
+    <div class="grid">
+      <div class="kv"><span class="label">พิกัดล่าสุด</span><b id="lastPos">-</b></div>
+      <div class="kv"><span class="label">เวลา</span><b id="lastAt">-</b></div>
+      <div class="kv"><span class="label">สถานที่ล่าสุด</span><b id="lastPlace">-</b></div>
+      <div class="kv"><span class="label">จับครั้งถัดไป</span><b id="nextAt">-</b></div>
+    </div>
+    <p class="err" id="errText" hidden></p>
+    <p class="small muted" id="placesText"></p>
+  </section>
+
+  <div class="buttons">
+    <button class="big primary" id="b1" type="button"><span class="n">ปุ่ม 1</span><span class="t" id="b1t">เริ่มบันทึก</span><span class="d" id="b1d">เริ่มจับพิกัดตามความถี่ที่ตั้งไว้</span></button>
+    <button class="big" id="b2" type="button"><span class="n">ปุ่ม 2</span><span class="t">บันทึกชื่อสถานที่</span><span class="d">ตั้งชื่อจุดที่อยู่ตอนนี้</span></button>
+    <button class="big" id="b3" type="button"><span class="n">ปุ่ม 3</span><span class="t">ไฟล์บันทึก</span><span class="d">ดูเส้นทางแต่ละวัน</span></button>
+    <button class="big" id="b4" type="button"><span class="n">ปุ่ม 4</span><span class="t">ตั้งค่า</span><span class="d">ความถี่ จำนวนครั้ง รัศมี</span></button>
+  </div>
+
+  <div class="card" id="permCard" hidden>
+    <h2>ต้องเปิดสิทธิ์ตำแหน่งก่อน</h2>
+    <p class="small">แอปยังไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง จึงเริ่มบันทึกไม่ได้ เปิดหน้าตั้งค่าแอป แล้วไปที่ "สิทธิ์" → "ตำแหน่ง" → เลือก "อนุญาตเฉพาะขณะใช้แอป" และเปิด "ใช้ตำแหน่งที่แม่นยำ"</p>
+    <div class="row"><button class="btn primary" id="openSettings" type="button">เปิดหน้าตั้งค่าแอป</button></div>
+  </div>
+
+  <!-- FILES (button 3) -->
+  <section id="vFiles" class="card" hidden>
+    <div class="row" style="justify-content:space-between"><h2>ไฟล์บันทึกเส้นทาง</h2><button class="btn" id="refreshFiles" type="button">โหลดใหม่</button></div>
+    <p class="small muted">เก็บไว้ในเครื่องที่ <span class="mono">Documents/GPS-Track/ปี/เดือน/วัน/</span></p>
+    <div class="tree" id="fileTree"></div>
+  </section>
+
+  <section id="vFile" class="card" hidden>
+    <div class="row" style="justify-content:space-between">
+      <button class="btn" id="backFiles" type="button">‹ กลับ</button>
+      <button class="btn" id="shareFile" type="button">แชร์/เปิดด้วยแอปอื่น</button>
+    </div>
+    <div><h2 id="fileName">-</h2><p class="small muted mono" id="fileFolder"></p></div>
+    <p class="small muted" id="fileSummary"></p>
+    <div class="tablewrap"><table><thead><tr><th>วันเวลา</th><th>ละติจูด</th><th>ลองจิจูด</th><th>ชื่อสถานที่</th></tr></thead><tbody id="fileRows"></tbody></table></div>
+  </section>
+
+  <!-- SETTINGS (button 4) -->
+  <section id="vSettings" class="card" hidden>
+    <h2>ตั้งค่า</h2>
+    <div class="field">
+      <label for="sInterval">ความถี่การบันทึกตำแหน่ง GPS</label>
+      <select id="sInterval">
+        <option value="1">ทุก 1 นาที</option>
+        <option value="10">ทุก 10 นาที</option>
+        <option value="60">ทุก 1 ชั่วโมง</option>
+        <option value="120">ทุก 2 ชั่วโมง</option>
+        <option value="360">ทุก 6 ชั่วโมง</option>
+        <option value="720">ทุก 12 ชั่วโมง</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sCheck">บันทึกกี่ครั้ง จึงตรวจชื่อสถานที่</label>
+      <input type="number" id="sCheck" min="1" max="999" step="1" inputmode="numeric" value="6">
+      <span class="hint" id="checkHint"></span>
+    </div>
+    <div class="field">
+      <label for="sRadius">รัศมีจับคู่สถานที่ (เมตร)</label>
+      <input type="number" id="sRadius" min="5" max="50000" step="5" inputmode="numeric" value="100">
+      <span class="hint">ถ้าอยู่ห่างจากจุดที่เคยตั้งชื่อไม่เกินระยะนี้ จะใช้ชื่อเดิมโดยไม่ถาม ใช้กับจุดที่ตั้งชื่อใหม่จากนี้ไป</span>
+    </div>
+    <div class="row"><button class="btn primary" id="sSave" type="button">บันทึกการตั้งค่า</button></div>
+    <p class="status-line" id="sStatus"></p>
+    <p class="small muted">ค่าใหม่ใช้ตั้งแต่รอบการบันทึกถัดไป ข้อมูลที่บันทึกไปแล้วไม่เปลี่ยน</p>
+  </section>
+</div>
+
+<!-- Button 2: name this place -->
+<div class="modal" id="mPlace" hidden role="dialog" aria-modal="true" aria-labelledby="mPlaceTitle">
+  <div class="dialog">
+    <div class="top"><h2 id="mPlaceTitle">บันทึกชื่อสถานที่</h2><button class="x" type="button" data-close="mPlace" aria-label="ปิด">×</button></div>
+    <p class="small muted">แอปจะจับพิกัดตอนนี้ แล้วบันทึกชื่อนี้ไว้สำหรับจำสถานที่ครั้งต่อไป</p>
+    <div class="field"><label for="placeName">ชื่อสถานที่</label><input type="text" id="placeName" placeholder="เช่น บ้าน, สำนักงาน, ร้านกาแฟหน้าปากซอย" autocomplete="off" maxlength="120"></div>
+    <div class="row"><button class="btn primary" id="placeSave" type="button">บันทึก</button></div>
+    <p class="status-line" id="placeStatus"></p>
+  </div>
+</div>
+
+<!-- Automatic check: "คุณอยู่ที่ไหน?" -->
+<div class="modal" id="mAsk" hidden role="dialog" aria-modal="true" aria-labelledby="mAskTitle">
+  <div class="dialog">
+    <div class="top"><h2 id="mAskTitle">คุณอยู่ที่ไหน?</h2><button class="x" type="button" id="askClose" aria-label="ปิดโดยไม่ตั้งชื่อ">×</button></div>
+    <p class="small muted" id="askWhere">ยังไม่มีสถานที่ที่บันทึกไว้ใกล้จุดนี้</p>
+    <div class="field"><label for="askName">ชื่อสถานที่</label><input type="text" id="askName" placeholder="พิมพ์ชื่อสถานที่" autocomplete="off" maxlength="120"></div>
+    <div class="row"><button class="btn primary" id="askSave" type="button">บันทึก</button></div>
+    <p class="small muted">ปิดหน้าต่างนี้โดยไม่พิมพ์ชื่อ จะบันทึกแค่วันเวลาและพิกัด</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
