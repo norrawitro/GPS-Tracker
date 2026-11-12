@@ -108,6 +108,14 @@ body.sheet-open{overflow:hidden}
 .lock{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .lock .dialog{box-shadow:none;border:1px solid var(--line)}
 input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.big.wide{grid-column:1/-1;min-height:72px}
+.rem{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.rem.off{opacity:.55}
+.rem-main{display:flex;flex-direction:column;min-width:0;flex:1 1 180px}
+.rem-main b{overflow-wrap:anywhere}
+#vRemind{position:fixed;inset:0;z-index:40;border-radius:0;border:0;overflow-y:auto;
+  padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .sep{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.9rem;max-width:calc(100% - 32px)}
 </style>
@@ -144,6 +152,7 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <button class="big" id="b2" type="button"><span class="n">ปุ่ม 2</span><span class="t">บันทึกชื่อสถานที่</span><span class="d">ตั้งชื่อจุดที่อยู่ตอนนี้</span></button>
     <button class="big" id="b3" type="button"><span class="n">ปุ่ม 3</span><span class="t">ไฟล์บันทึก</span><span class="d">ดูเส้นทางแต่ละวัน</span></button>
     <button class="big" id="b4" type="button"><span class="n">ปุ่ม 4</span><span class="t">ตั้งค่า</span><span class="d">ความถี่ จำนวนครั้ง รัศมี</span></button>
+    <button class="big wide" id="b5" type="button"><span class="n">ปุ่ม 5</span><span class="t">การเตือน</span><span class="d">เตือนตามเวลาหรือเมื่อถึงสถานที่</span></button>
   </div>
 
   <div class="card upd" id="updBanner" hidden>
@@ -187,6 +196,20 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
   </section>
 
   <!-- SETTINGS (button 4) -->
+  <!-- REMINDERS (button 5) -->
+  <section id="vRemind" class="card" hidden>
+    <div class="row" style="justify-content:space-between"><h2>การเตือน</h2><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div>
+    <div class="field"><label for="rText">ข้อความเตือน</label><input type="text" id="rText" maxlength="200" placeholder="เช่น ซื้อนม, โทรหาลูกค้า"></div>
+    <div class="field"><label for="rKind">เตือนเมื่อ</label>
+      <select id="rKind"><option value="time">ถึงเวลา (ทุกวัน)</option><option value="place">ถึงสถานที่</option></select></div>
+    <div class="field" id="rTimeField"><label for="rTime">เวลา</label><input type="time" id="rTime" value="08:00"></div>
+    <div class="field" id="rPlaceField" hidden><label for="rPlace">สถานที่ (จากที่บันทึกไว้)</label><select id="rPlace"></select>
+      <span class="hint">เตือนครั้งเดียวเมื่อเข้าไปในรัศมี ออกไปแล้วกลับมาใหม่จะเตือนอีก ต้องเปิดการบันทึกไว้ และตรวจตามความถี่ที่ตั้งไว้</span></div>
+    <div class="row"><button class="btn primary" id="rAdd" type="button">เพิ่มการเตือน</button><button class="btn" id="rTest" type="button">ลองเสียงและกล่องเตือน</button></div>
+    <p class="status-line" id="rStatus"></p>
+    <div class="tree" id="rList"></div>
+  </section>
+
   <section id="vSettings" class="card" hidden>
     <div class="row" style="justify-content:space-between"><h2>ตั้งค่า</h2><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div>
     <div class="field">
@@ -217,6 +240,12 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <h3>หน้าต่างถาม "คุณอยู่ที่ไหน?"</h3>
     <p class="small" id="popupSetting">-</p>
     <div class="row"><button class="btn" id="popupAllow2" type="button">ตั้งค่าแสดงทับแอปอื่น</button><button class="btn" id="notifAllow2" type="button">ตั้งค่าการแจ้งเตือน</button></div>
+
+    <hr class="sep">
+    <h3>หลังเปิดเครื่องใหม่</h3>
+    <p class="small" id="bootState">-</p>
+    <div class="row"><button class="btn" id="bootAllow" type="button">ตั้งค่าตำแหน่ง → อนุญาตตลอดเวลา</button></div>
+    <p class="small muted">มือถือบางยี่ห้อ เช่น TECNO ต้องเปิด "เริ่มอัตโนมัติ" ของแอปนี้ในตั้งค่าเครื่องด้วย</p>
 
     <hr class="sep">
     <h3>รหัสผ่านเข้าแอป</h3>

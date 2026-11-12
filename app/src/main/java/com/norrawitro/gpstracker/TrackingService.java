@@ -38,7 +38,7 @@ public class TrackingService extends Service {
     static final String KEY_REPLY = "place_name";
 
     private static final String CH_RUN = "tracking_v1";
-    private static final String CH_ASK = "where_v1";
+    static final String CH_ASK = "where_v1";
     static final int NOTIF_RUN = 5100;
     static final int NOTIF_ASK = 5101;
     private static final long FIX_TIMEOUT_MS = 45_000;
@@ -99,7 +99,7 @@ public class TrackingService extends Service {
             o.put("nextAt", p.getLong("nextAt", 0));
             o.put("lastError", p.getString("lastError", ""));
             o.put("pending", p.getString("pending", null) != null ? new JSONObject(p.getString("pending", "{}")) : JSONObject.NULL);
-            o.put("places", new PlacesDb(c).count());
+            o.put("places", PlacesDb.get(c).count());
             o.put("permission", hasLocationPermission(c));
             o.put("overlay", WherePopup.allowed(c));
             o.put("notifications", c.getSystemService(NotificationManager.class).areNotificationsEnabled());
@@ -298,12 +298,13 @@ public class TrackingService extends Service {
      * so nothing is asked while travelling.
      */
     private void onFix(long at, double lat, double lng) {
+        io.execute(() -> Reminders.onFix(this, lat, lng)); // place reminders (issue #8)
         SharedPreferences p = prefs(this);
         p.edit().putLong("lastAt", at)
                 .putLong("lastLat", Double.doubleToRawLongBits(lat)).putLong("lastLng", Double.doubleToRawLongBits(lng))
                 .remove("lastError").apply();
 
-        PlacesDb.Place near = new PlacesDb(this).nearestWithin(lat, lng);
+        PlacesDb.Place near = PlacesDb.get(this).nearestWithin(lat, lng);
         if (near != null) {
             write(at, lat, lng, near.name);
             p.edit().putInt("count", 0).remove("anchorLat").remove("anchorLng").putString("lastPlace", near.name).apply();
@@ -357,7 +358,7 @@ public class TrackingService extends Service {
             double lat = pend.getDouble("lat"), lng = pend.getDouble("lng");
             String clean = name == null ? "" : name.trim();
             if (!clean.isEmpty()) {
-                new PlacesDb(this).add(clean, lat, lng, radiusM(this), TrackLog.stamp(at));
+                PlacesDb.get(this).add(clean, lat, lng, radiusM(this), TrackLog.stamp(at));
                 p.edit().putString("lastPlace", clean).apply();
             }
             write(at, lat, lng, clean);
@@ -374,7 +375,7 @@ public class TrackingService extends Service {
             if (loc == null) { done.onFix(null, err); return; }
             long at = System.currentTimeMillis();
             String clean = name.trim();
-            new PlacesDb(this).add(clean, loc.getLatitude(), loc.getLongitude(), radiusM(this), TrackLog.stamp(at));
+            PlacesDb.get(this).add(clean, loc.getLatitude(), loc.getLongitude(), radiusM(this), TrackLog.stamp(at));
             prefs(this).edit().putString("lastPlace", clean).apply();
             write(at, loc.getLatitude(), loc.getLongitude(), clean);
             done.onFix(loc, null);
@@ -385,7 +386,7 @@ public class TrackingService extends Service {
     private void write(long at, double lat, double lng, String place) {
         io.execute(() -> {
             try {
-                PlacesDb.Place near = new PlacesDb(this).nearest(lat, lng);
+                PlacesDb.Place near = PlacesDb.get(this).nearest(lat, lng);
                 int battery = batteryPct(this);
                 TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM, battery);
                 prefs(this).edit().putInt("battery", battery).apply();

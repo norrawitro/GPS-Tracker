@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         TrackingService.ensureChannels(this);
         TrackingService.reconcile(this);
+        io.execute(() -> Reminders.rescheduleAll(this)); // alarms are lost after a force stop
         locked = AppLock.enabled(this);
 
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
@@ -195,24 +196,96 @@ public class MainActivity extends Activity {
             return TrackingService.state(MainActivity.this).toString();
         }
 
+        /**
+         * Checks the password off the page's thread (the PBKDF2 hash takes a moment, and running it
+         * inside the call froze the screen). Answers with the "unlocked" event: "" or a message.
+         */
         @JavascriptInterface
-        public String unlock(String pw) {
-            String err = AppLock.unlock(MainActivity.this, pw);
-            if (err.isEmpty()) {
-                locked = false;
-                emitState();
-                emitPendingAsk();
-            }
-            return err;
+        public void unlockAsync(String pw) {
+            io.execute(() -> {
+                String err = AppLock.unlock(MainActivity.this, pw);
+                if (err.isEmpty()) {
+                    locked = false;
+                    emitState();
+                    emitPendingAsk();
+                }
+                emit("unlocked", JSONObject.quote(err));
+            });
         }
 
-        /** Set, change or (new = "") remove the app password. Returns "" on success or a message. */
+        /** Set, change or (new = "") remove the app password. Answers with the "pwChanged" event. */
         @JavascriptInterface
-        public String changePassword(String current, String next) {
-            if (locked) return "ปลดล็อกแอปก่อน";
-            String err = AppLock.change(MainActivity.this, current, next);
-            if (err.isEmpty()) emitLock();
-            return err;
+        public void changePasswordAsync(String current, String next) {
+            if (locked) { emit("pwChanged", JSONObject.quote("ปลดล็อกแอปก่อน")); return; }
+            io.execute(() -> {
+                String err = AppLock.change(MainActivity.this, current, next);
+                if (err.isEmpty()) emitLock();
+                emit("pwChanged", JSONObject.quote(err));
+            });
+        }
+
+        // ---------- reminders (issue #8) ----------
+
+        /** Sends {reminders: [...], places: [names]} as the "reminders" event. */
+        @JavascriptInterface
+        public void listReminders() {
+            if (locked) return;
+            io.execute(() -> {
+                try {
+                    JSONObject o = new JSONObject();
+                    o.put("reminders", PlacesDb.get(MainActivity.this).reminders());
+                    o.put("places", PlacesDb.get(MainActivity.this).placeNames());
+                    emit("reminders", o.toString());
+                } catch (Exception e) {
+                    emit("warn", JSONObject.quote("อ่านรายการเตือนไม่ได้"));
+                }
+            });
+        }
+
+        /** kind "time" uses time ("HH:MM"); kind "place" uses place (a saved place name). */
+        @JavascriptInterface
+        public void addReminder(String text, String kind, String time, String place) {
+            if (locked) return;
+            io.execute(() -> {
+                long id = PlacesDb.get(MainActivity.this).addReminder(text.trim(), kind,
+                        "time".equals(kind) ? time : null, "place".equals(kind) ? place : null,
+                        TrackLog.stamp(System.currentTimeMillis()));
+                if ("time".equals(kind) && id > 0) Reminders.schedule(MainActivity.this, id, time);
+                listReminders();
+            });
+        }
+
+        @JavascriptInterface
+        public void setReminderEnabled(String id, boolean on) {
+            if (locked) return;
+            io.execute(() -> {
+                long rid = Long.parseLong(id);
+                PlacesDb.get(MainActivity.this).setReminderEnabled(rid, on);
+                Reminders.rescheduleAll(MainActivity.this);
+                listReminders();
+            });
+        }
+
+        @JavascriptInterface
+        public void deleteReminder(String id) {
+            if (locked) return;
+            io.execute(() -> {
+                long rid = Long.parseLong(id);
+                Reminders.cancel(MainActivity.this, rid);
+                PlacesDb.get(MainActivity.this).deleteReminder(rid);
+                listReminders();
+            });
+        }
+
+        @JavascriptInterface
+        public void testReminder(String text) {
+            ReminderAlert.show(MainActivity.this, 999, "ทดสอบการเตือน", text == null || text.isEmpty() ? "ตัวอย่างการเตือน" : text);
+        }
+
+        /** True when location is allowed "all the time", which lets recording resume after a restart. */
+        @JavascriptInterface
+        public boolean backgroundLocation() {
+            return BootReceiver.backgroundLocation(MainActivity.this);
         }
 
         @JavascriptInterface

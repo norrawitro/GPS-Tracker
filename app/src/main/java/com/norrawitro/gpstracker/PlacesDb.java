@@ -6,8 +6,22 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
-/** SQLite table of named places, used to recognise where the person is. Not editable from the file viewer. */
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+/**
+ * SQLite tables: named places (used to recognise where the person is; not editable from the file viewer)
+ * and reminders. One shared helper for the whole app: separate helpers opened per GPS fix were never
+ * closed and could block one another on the database lock.
+ */
 public class PlacesDb extends SQLiteOpenHelper {
+    private static PlacesDb shared;
+
+    public static synchronized PlacesDb get(Context c) {
+        if (shared == null) shared = new PlacesDb(c.getApplicationContext());
+        return shared;
+    }
+
     public static final class Place {
         public final String name;
         public final double lat, lng, radiusM, distanceM;
@@ -16,8 +30,8 @@ public class PlacesDb extends SQLiteOpenHelper {
         }
     }
 
-    public PlacesDb(Context c) {
-        super(c, "places.db", null, 1);
+    private PlacesDb(Context c) {
+        super(c, "places.db", null, 2);
     }
 
     @Override
@@ -29,10 +43,110 @@ public class PlacesDb extends SQLiteOpenHelper {
                 "lng REAL NOT NULL," +            // ลองจิจูด
                 "radius_m REAL NOT NULL," +       // รัศมีจับคู่ (เมตร)
                 "first_saved TEXT NOT NULL)");    // วันที่บันทึกครั้งแรก
+        createReminders(db);
+    }
+
+    private static void createReminders(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS reminders (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "text TEXT NOT NULL," +           // ข้อความเตือน
+                "kind TEXT NOT NULL," +           // time | place
+                "time TEXT," +                    // HH:MM (kind = time), repeats every day
+                "place TEXT," +                   // place name (kind = place)
+                "enabled INTEGER NOT NULL DEFAULT 1," +
+                "armed INTEGER NOT NULL DEFAULT 1," + // place: 1 = will fire on the next entry
+                "created TEXT NOT NULL)");
     }
 
     @Override
-    public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {}
+    public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
+        if (oldV < 2) createReminders(db);
+    }
+
+    // ---------- reminders ----------
+
+    public JSONArray reminders() throws Exception {
+        JSONArray out = new JSONArray();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id, text, kind, time, place, enabled FROM reminders ORDER BY kind, time, place, id", null)) {
+            while (c.moveToNext()) {
+                JSONObject o = new JSONObject();
+                o.put("id", c.getLong(0));
+                o.put("text", c.getString(1));
+                o.put("kind", c.getString(2));
+                o.put("time", c.isNull(3) ? "" : c.getString(3));
+                o.put("place", c.isNull(4) ? "" : c.getString(4));
+                o.put("enabled", c.getInt(5) == 1);
+                out.put(o);
+            }
+        }
+        return out;
+    }
+
+    public long addReminder(String text, String kind, String time, String place, String created) {
+        ContentValues v = new ContentValues();
+        v.put("text", text);
+        v.put("kind", kind);
+        v.put("time", time);
+        v.put("place", place);
+        v.put("enabled", 1);
+        v.put("armed", 1);
+        v.put("created", created);
+        return getWritableDatabase().insert("reminders", null, v);
+    }
+
+    public void setReminderEnabled(long id, boolean on) {
+        ContentValues v = new ContentValues();
+        v.put("enabled", on ? 1 : 0);
+        if (on) v.put("armed", 1);
+        getWritableDatabase().update("reminders", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public void deleteReminder(long id) {
+        getWritableDatabase().delete("reminders", "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public void setArmed(long id, boolean armed) {
+        ContentValues v = new ContentValues();
+        v.put("armed", armed ? 1 : 0);
+        getWritableDatabase().update("reminders", v, "id=?", new String[]{String.valueOf(id)});
+    }
+
+    /** One reminder as {id, text, kind, time, place, enabled, armed}, or null. */
+    public JSONObject reminder(long id) throws Exception {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT id, text, kind, time, place, enabled, armed FROM reminders WHERE id=?", new String[]{String.valueOf(id)})) {
+            if (!c.moveToFirst()) return null;
+            JSONObject o = new JSONObject();
+            o.put("id", c.getLong(0));
+            o.put("text", c.getString(1));
+            o.put("kind", c.getString(2));
+            o.put("time", c.isNull(3) ? "" : c.getString(3));
+            o.put("place", c.isNull(4) ? "" : c.getString(4));
+            o.put("enabled", c.getInt(5) == 1);
+            o.put("armed", c.getInt(6) == 1);
+            return o;
+        }
+    }
+
+    /** Place names that have at least one saved point, A-Z, for the reminder picker. */
+    public JSONArray placeNames() throws Exception {
+        JSONArray out = new JSONArray();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT DISTINCT name FROM places ORDER BY name", null)) {
+            while (c.moveToNext()) out.put(c.getString(0));
+        }
+        return out;
+    }
+
+    /** True when the point is inside the radius of any saved point with this name. */
+    public boolean insideNamed(String name, double lat, double lng) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT lat, lng, radius_m FROM places WHERE name=?", new String[]{name})) {
+            while (c.moveToNext()) {
+                if (distanceM(lat, lng, c.getDouble(0), c.getDouble(1)) <= c.getDouble(2)) return true;
+            }
+        }
+        return false;
+    }
 
     public void add(String name, double lat, double lng, double radiusM, String savedAt) {
         ContentValues v = new ContentValues();

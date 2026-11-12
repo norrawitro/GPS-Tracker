@@ -56,7 +56,7 @@
   function pullState() { if (A) { try { handlers.state(JSON.parse(A.state())); } catch {} } }
 
   // ---------- views (buttons 3 and 4) ----------
-  const VIEWS = ["vFiles", "vFile", "vSettings"];
+  const VIEWS = ["vFiles", "vFile", "vSettings", "vRemind"];
   function showView(id) {
     VIEWS.forEach(v => $(v).hidden = v !== id);
     document.body.classList.toggle("sheet-open", !!id);
@@ -182,6 +182,7 @@
 
   // ---------- button 4: settings ----------
   $("b4").addEventListener("click", () => {
+    renderBoot();
     $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
     updateHint(); $("sStatus").textContent = ""; showView("vSettings");
   });
@@ -256,14 +257,14 @@
   $("lockBtn").addEventListener("click", () => {
     if (!A) return;
     $("lockBtn").disabled = true; $("lockStatus").textContent = "กำลังตรวจ…";
-    setTimeout(() => {
-      const err = A.unlock($("lockPw").value);
-      $("lockBtn").disabled = false;
-      if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
-      $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
-      pullState();
-    }, 30);
+    A.unlockAsync($("lockPw").value); // answered by the "unlocked" event
   });
+  handlers.unlocked = err => {
+    $("lockBtn").disabled = false;
+    if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
+    $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
+    pullState();
+  };
   $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("lockBtn").click(); });
   function savePw(remove) {
     if (!A) { $("pwStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
@@ -273,17 +274,64 @@
       if (next !== $("pwNew2").value) { $("pwStatus").textContent = "รหัสผ่านใหม่ 2 ช่องไม่ตรงกัน"; return; }
     }
     $("pwStatus").textContent = "กำลังบันทึก…";
-    setTimeout(() => {
-      const err = A.changePassword(cur, next);
-      if (err) { $("pwStatus").textContent = err; return; }
-      lockEnabled = !remove; renderPw();
-      ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
-      $("pwStatus").textContent = remove ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
-    }, 30);
+    pwRemoving = remove;
+    A.changePasswordAsync(cur, next); // answered by the "pwChanged" event
   }
+  let pwRemoving = false;
+  handlers.pwChanged = err => {
+    if (err) { $("pwStatus").textContent = err; return; }
+    lockEnabled = !pwRemoving; renderPw();
+    ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
+    $("pwStatus").textContent = pwRemoving ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
+  };
   $("pwSave").addEventListener("click", () => savePw(false));
   $("pwRemove").addEventListener("click", () => savePw(true));
   if (A && A.lockEnabled) { lockEnabled = A.lockEnabled(); renderPw(); }
+
+  // ---------- button 5: reminders (issue #8) ----------
+  let reminderPlaces = [];
+  $("b5").addEventListener("click", () => {
+    showView("vRemind"); $("rStatus").textContent = "";
+    $("rList").innerHTML = '<p class="small muted">กำลังโหลด…</p>';
+    if (A && A.listReminders) A.listReminders(); else handlers.reminders({ reminders: [], places: [] });
+  });
+  function showKind() { const t = $("rKind").value === "time"; $("rTimeField").hidden = !t; $("rPlaceField").hidden = t; }
+  $("rKind").addEventListener("change", showKind);
+  handlers.reminders = d => {
+    const list = (d && d.reminders) || [];
+    reminderPlaces = (d && d.places) || [];
+    const sel = $("rPlace"), keep = sel.value;
+    sel.innerHTML = reminderPlaces.length ? reminderPlaces.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+      : '<option value="">ยังไม่มีสถานที่ที่บันทึกไว้</option>';
+    if (reminderPlaces.includes(keep)) sel.value = keep;
+    $("rList").innerHTML = list.length ? list.map(r => `<div class="rem${r.enabled ? "" : " off"}">
+        <div class="rem-main"><span class="small muted">${r.kind === "time" ? `ทุกวัน เวลา ${esc(r.time)}` : `เมื่อถึง ${esc(r.place)}`}</span><b>${esc(r.text)}</b></div>
+        <div class="row"><label class="small"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? "checked" : ""}> เปิด</label>
+        <button class="btn" type="button" data-rdel="${r.id}">ลบ</button></div></div>`).join("")
+      : '<div class="empty">ยังไม่มีการเตือน</div>';
+  };
+  $("rList").addEventListener("change", e => { const id = e.target.dataset.rtoggle; if (id && A) A.setReminderEnabled(id, e.target.checked); });
+  $("rList").addEventListener("click", e => { const id = e.target.dataset.rdel; if (id && A) { A.deleteReminder(id); toast("ลบการเตือนแล้ว"); } });
+  $("rAdd").addEventListener("click", () => {
+    const text = $("rText").value.trim(), kind = $("rKind").value, time = $("rTime").value, place = $("rPlace").value;
+    if (!text) { $("rStatus").textContent = "พิมพ์ข้อความที่จะให้เตือนก่อน"; return; }
+    if (kind === "time" && !/^\d{2}:\d{2}$/.test(time)) { $("rStatus").textContent = "เลือกเวลาที่จะให้เตือน"; return; }
+    if (kind === "place" && !place) { $("rStatus").textContent = "ยังไม่มีสถานที่ให้เลือก ตั้งชื่อสถานที่ด้วยปุ่ม 2 ก่อน"; return; }
+    if (!A) { $("rStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    A.addReminder(text, kind, time, place);
+    $("rText").value = "";
+    $("rStatus").textContent = kind === "time" ? `ตั้งเตือนทุกวันเวลา ${time} แล้ว` : `ตั้งเตือนเมื่อถึง ${place} แล้ว (ต้องเปิดการบันทึกไว้)`;
+  });
+  $("rTest").addEventListener("click", () => { if (A && A.testReminder) A.testReminder($("rText").value.trim()); });
+
+  // ---------- after a restart ----------
+  function renderBoot() {
+    const ok = A && A.backgroundLocation ? A.backgroundLocation() : false;
+    $("bootState").textContent = ok ? "เปิดเครื่องใหม่หรืออัปเดตแอปแล้ว จะบันทึกต่อเองอัตโนมัติ"
+      : "ตอนนี้ต้องกดเริ่มบันทึกเองหลังเปิดเครื่องใหม่ ถ้าอยากให้บันทึกต่อเอง ให้อนุญาตตำแหน่งแบบ \"อนุญาตตลอดเวลา\"";
+    $("bootAllow").hidden = ok;
+  }
+  $("bootAllow").addEventListener("click", () => A && A.openAppSettings());
 
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
