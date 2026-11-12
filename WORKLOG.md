@@ -31,3 +31,23 @@ Not confirmed on a phone: there are no crash or ANR logs from the device in this
 ### Checks
 - Page tested in a browser at 400 px with a mock bridge: adding, switching off and deleting time and place reminders, the test alert, and wrong then right password through the new async unlock. No errors, no sideways scrolling.
 - Java compiles only in CI (no Android SDK in this session). Not yet run on a phone.
+
+## 2026-11-12 (later): correction from the user, pins, always running
+
+The user clarified, through the Manager session:
+- "ค้าง" did not mean the app freezes. It meant the app should **keep running all the time** and start again by itself after the phone restarts. Section 1 above was a misreading of the request; those three fixes stay because each is a real defect in the code (the overlay blocked every touch on the screen, the password check blocked the page, database connections leaked), but they were not what the user asked for.
+- Place reminders: **a saved place or a new pin**.
+- A "เตือนความจำ" button: write the message, then choose the trigger, time or place.
+
+### Changes
+- Button 5 renamed "เตือนความจำ".
+- **New pin:** when "ถึงสถานที่" is chosen, pick "สถานที่ที่บันทึกไว้" or "ปักหมุดใหม่". A pin is placed by tapping a map (OpenStreetMap tiles, needs internet) or with "ใช้ตำแหน่งปัจจุบัน", with its own name and radius (default 150 m, minimum 20 m). Stored on the reminder (`pin_lat`, `pin_lng`, `pin_radius`, database version 3); it does not add a saved place.
+- The map library (Leaflet 1.9.4, BSD-2-Clause, licence in `assets/www/leaflet/LICENSE`) is bundled in the app, so only the map tiles need the internet.
+- **Keep running:**
+  - the tracking service is now `START_STICKY`, so Android starts it again if it stops it to free memory while recording is on;
+  - Settings has "ให้แอปทำงานตลอด", which asks Android to exempt the app from battery optimization (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`); without it, Android may stop the app in the background;
+  - together with the restart handling in section 3.
+
+### Checks
+- Browser test with a mock bridge: pin from the current position, pin label and radius, the map drawing the pin and its radius, the reminder list showing pins, and the fallback text when the map cannot load. No errors, no sideways scrolling.
+- Could not load real map tiles here: this session's network blocks tile.openstreetmap.org. On the phone they load over its own connection.

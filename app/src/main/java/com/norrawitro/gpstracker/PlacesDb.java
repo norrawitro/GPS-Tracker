@@ -31,7 +31,7 @@ public class PlacesDb extends SQLiteOpenHelper {
     }
 
     private PlacesDb(Context c) {
-        super(c, "places.db", null, 2);
+        super(c, "places.db", null, 3);
     }
 
     @Override
@@ -52,7 +52,10 @@ public class PlacesDb extends SQLiteOpenHelper {
                 "text TEXT NOT NULL," +           // ข้อความเตือน
                 "kind TEXT NOT NULL," +           // time | place
                 "time TEXT," +                    // HH:MM (kind = time), repeats every day
-                "place TEXT," +                   // place name (kind = place)
+                "place TEXT," +                   // saved place name (kind = place), or a label for a pin
+                "pin_lat REAL," +                 // a pin dropped for this reminder only (kind = place)
+                "pin_lng REAL," +
+                "pin_radius REAL," +
                 "enabled INTEGER NOT NULL DEFAULT 1," +
                 "armed INTEGER NOT NULL DEFAULT 1," + // place: 1 = will fire on the next entry
                 "created TEXT NOT NULL)");
@@ -60,7 +63,13 @@ public class PlacesDb extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
-        if (oldV < 2) createReminders(db);
+        if (oldV < 2) {
+            createReminders(db); // already has the pin columns
+        } else if (oldV < 3) {
+            db.execSQL("ALTER TABLE reminders ADD COLUMN pin_lat REAL");
+            db.execSQL("ALTER TABLE reminders ADD COLUMN pin_lng REAL");
+            db.execSQL("ALTER TABLE reminders ADD COLUMN pin_radius REAL");
+        }
     }
 
     // ---------- reminders ----------
@@ -68,7 +77,7 @@ public class PlacesDb extends SQLiteOpenHelper {
     public JSONArray reminders() throws Exception {
         JSONArray out = new JSONArray();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, text, kind, time, place, enabled FROM reminders ORDER BY kind, time, place, id", null)) {
+                "SELECT id, text, kind, time, place, enabled, pin_lat, pin_lng, pin_radius FROM reminders ORDER BY kind, time, place, id", null)) {
             while (c.moveToNext()) {
                 JSONObject o = new JSONObject();
                 o.put("id", c.getLong(0));
@@ -77,6 +86,7 @@ public class PlacesDb extends SQLiteOpenHelper {
                 o.put("time", c.isNull(3) ? "" : c.getString(3));
                 o.put("place", c.isNull(4) ? "" : c.getString(4));
                 o.put("enabled", c.getInt(5) == 1);
+                if (!c.isNull(6)) { o.put("pinLat", c.getDouble(6)); o.put("pinLng", c.getDouble(7)); o.put("pinRadius", c.getDouble(8)); }
                 out.put(o);
             }
         }
@@ -89,6 +99,21 @@ public class PlacesDb extends SQLiteOpenHelper {
         v.put("kind", kind);
         v.put("time", time);
         v.put("place", place);
+        v.put("enabled", 1);
+        v.put("armed", 1);
+        v.put("created", created);
+        return getWritableDatabase().insert("reminders", null, v);
+    }
+
+    /** A place reminder on a pin dropped for it, not one of the saved places. */
+    public long addPinReminder(String text, String label, double lat, double lng, double radiusM, String created) {
+        ContentValues v = new ContentValues();
+        v.put("text", text);
+        v.put("kind", "place");
+        v.put("place", label);
+        v.put("pin_lat", lat);
+        v.put("pin_lng", lng);
+        v.put("pin_radius", radiusM);
         v.put("enabled", 1);
         v.put("armed", 1);
         v.put("created", created);
@@ -115,7 +140,7 @@ public class PlacesDb extends SQLiteOpenHelper {
     /** One reminder as {id, text, kind, time, place, enabled, armed}, or null. */
     public JSONObject reminder(long id) throws Exception {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, text, kind, time, place, enabled, armed FROM reminders WHERE id=?", new String[]{String.valueOf(id)})) {
+                "SELECT id, text, kind, time, place, enabled, armed, pin_lat, pin_lng, pin_radius FROM reminders WHERE id=?", new String[]{String.valueOf(id)})) {
             if (!c.moveToFirst()) return null;
             JSONObject o = new JSONObject();
             o.put("id", c.getLong(0));
@@ -125,6 +150,7 @@ public class PlacesDb extends SQLiteOpenHelper {
             o.put("place", c.isNull(4) ? "" : c.getString(4));
             o.put("enabled", c.getInt(5) == 1);
             o.put("armed", c.getInt(6) == 1);
+            if (!c.isNull(7)) { o.put("pinLat", c.getDouble(7)); o.put("pinLng", c.getDouble(8)); o.put("pinRadius", c.getDouble(9)); }
             return o;
         }
     }

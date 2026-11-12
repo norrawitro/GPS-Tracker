@@ -255,6 +255,68 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** A place reminder on a pin (lat/lng picked on the map or the current position). */
+        @JavascriptInterface
+        public void addPinReminder(String text, String label, double lat, double lng, double radiusM) {
+            if (locked) return;
+            io.execute(() -> {
+                PlacesDb.get(MainActivity.this).addPinReminder(text.trim(), label == null || label.trim().isEmpty() ? "หมุดที่ปักไว้" : label.trim(),
+                        lat, lng, Math.max(20, radiusM), TrackLog.stamp(System.currentTimeMillis()));
+                listReminders();
+            });
+        }
+
+        /** Current position for dropping a pin. Answers with the "here" event: {ok, lat, lng} or {ok:false, error}. */
+        @JavascriptInterface
+        public void currentLocation() {
+            main.post(() -> {
+                android.location.LocationManager lm = getSystemService(android.location.LocationManager.class);
+                java.util.function.Consumer<android.location.Location> done = loc -> {
+                    try {
+                        JSONObject o = new JSONObject();
+                        if (loc == null) { o.put("ok", false); o.put("error", "จับตำแหน่งไม่ได้ ลองไปที่โล่งแล้วลองใหม่"); }
+                        else { o.put("ok", true); o.put("lat", loc.getLatitude()); o.put("lng", loc.getLongitude()); }
+                        emit("here", o.toString());
+                    } catch (Exception ignored) {}
+                };
+                if (!TrackingService.hasLocationPermission(MainActivity.this)) {
+                    emit("here", "{\"ok\":false,\"error\":\"ยังไม่ได้เปิดสิทธิ์เข้าถึงตำแหน่ง\"}");
+                    return;
+                }
+                try {
+                    String provider = lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+                            ? android.location.LocationManager.GPS_PROVIDER : android.location.LocationManager.NETWORK_PROVIDER;
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        lm.getCurrentLocation(provider, new android.os.CancellationSignal(), getMainExecutor(), loc -> {
+                            if (loc != null) { done.accept(loc); return; }
+                            done.accept(lm.getLastKnownLocation(provider));
+                        });
+                    } else {
+                        done.accept(lm.getLastKnownLocation(provider));
+                    }
+                } catch (SecurityException e) {
+                    done.accept(null);
+                }
+            });
+        }
+
+        /** True when Android's battery optimization will not stop the app in the background. */
+        @JavascriptInterface
+        public boolean batteryUnrestricted() {
+            return getSystemService(android.os.PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+        }
+
+        @JavascriptInterface
+        public void askBatteryUnrestricted() {
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); } catch (Exception ignored) {}
+                }
+            });
+        }
+
         @JavascriptInterface
         public void setReminderEnabled(String id, boolean on) {
             if (locked) return;

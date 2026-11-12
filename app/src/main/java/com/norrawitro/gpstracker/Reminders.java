@@ -15,7 +15,7 @@ import java.util.Calendar;
 /**
  * Reminders with the person's own text (issue #8).
  * - time: fires at HH:MM, and again every time that clock time comes round (every day).
- * - place: fires once on entering a saved place's radius; it re-arms only after leaving, so it fires
+ * - place: a saved place or a pin dropped for the reminder; fires once on entering its radius; it re-arms only after leaving, so it fires
  *   again on the next entry. Checked on each GPS fix, so it needs recording on.
  */
 public class Reminders extends BroadcastReceiver {
@@ -103,7 +103,9 @@ public class Reminders extends BroadcastReceiver {
                 long id = r.getLong("id");
                 JSONObject full = db.reminder(id);
                 if (full == null) continue;
-                boolean inside = db.insideNamed(r.optString("place"), lat, lng);
+                boolean inside = full.has("pinLat")
+                        ? PlacesDb.distanceM(lat, lng, full.getDouble("pinLat"), full.getDouble("pinLng")) <= full.getDouble("pinRadius")
+                        : db.insideNamed(r.optString("place"), lat, lng);
                 boolean armed = full.optBoolean("armed", true);
                 if (inside && armed) {
                     db.setArmed(id, false);

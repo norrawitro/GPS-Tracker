@@ -153,7 +153,8 @@ public class TrackingService extends Service {
         startAsForeground();
         if (!recording(this)) { stopSelf(); return START_NOT_STICKY; }
         capture(); // start, or an alarm arriving while the service had been stopped by the system
-        return START_NOT_STICKY;
+        // Sticky: if Android stops the service to free memory, it starts it again while recording is on.
+        return START_STICKY;
     }
 
     private void startAsForeground() {

@@ -182,7 +182,7 @@
 
   // ---------- button 4: settings ----------
   $("b4").addEventListener("click", () => {
-    renderBoot();
+    renderBoot(); renderBattery();
     $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
     updateHint(); $("sStatus").textContent = ""; showView("vSettings");
   });
@@ -295,8 +295,45 @@
     $("rList").innerHTML = '<p class="small muted">กำลังโหลด…</p>';
     if (A && A.listReminders) A.listReminders(); else handlers.reminders({ reminders: [], places: [] });
   });
-  function showKind() { const t = $("rKind").value === "time"; $("rTimeField").hidden = !t; $("rPlaceField").hidden = t; }
+  function showKind() { const t = $("rKind").value === "time"; $("rTimeField").hidden = !t; $("rPlaceField").hidden = t; showWhere(); }
   $("rKind").addEventListener("change", showKind);
+
+  // Pin a new place: on a map (OpenStreetMap, needs internet) or at the current position.
+  let pin = null, map = null, marker = null, ring = null;
+  const isPin = () => $("rWherePin").checked;
+  function showWhere() {
+    $("rSavedBox").hidden = isPin(); $("rPinBox").hidden = !isPin();
+    if (isPin() && !$("rPlaceField").hidden) setTimeout(initMap, 30);
+  }
+  ["rWhereSaved", "rWherePin"].forEach(id => $(id).addEventListener("change", showWhere));
+  function initMap() {
+    if (map) { map.invalidateSize(); return; }
+    if (!window.L) { $("rMapHint").textContent = "โหลดแผนที่ไม่ได้ ใช้ปุ่ม \"ใช้ตำแหน่งปัจจุบัน\" แทน"; $("rMap").hidden = true; return; }
+    const start = state.lastAt ? [+state.lastLat, +state.lastLng] : [13.7563, 100.5018];
+    map = L.map("rMap").setView(start, state.lastAt ? 16 : 11);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    map.on("click", e => setPin(e.latlng.lat, e.latlng.lng));
+  }
+  function setPin(lat, lng) {
+    pin = { lat, lng };
+    $("rPinText").textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    if (map && window.L) {
+      const r = +$("rPinRadius").value || 150;
+      if (!marker) { marker = L.marker([lat, lng]).addTo(map); ring = L.circle([lat, lng], { radius: r }).addTo(map); }
+      else { marker.setLatLng([lat, lng]); ring.setLatLng([lat, lng]); ring.setRadius(r); }
+      map.setView([lat, lng], Math.max(map.getZoom(), 16));
+    }
+  }
+  $("rPinRadius").addEventListener("input", () => { if (ring) ring.setRadius(+$("rPinRadius").value || 150); });
+  $("rHere").addEventListener("click", () => {
+    if (!A || !A.currentLocation) { toast("ใช้ได้เฉพาะในแอปบนมือถือ"); return; }
+    $("rHere").disabled = true; $("rPinText").textContent = "กำลังจับตำแหน่ง… (อาจใช้เวลาครึ่งนาที)";
+    A.currentLocation();
+  });
+  handlers.here = h => {
+    $("rHere").disabled = false;
+    if (h && h.ok) setPin(+h.lat, +h.lng); else $("rPinText").textContent = (h && h.error) || "จับตำแหน่งไม่ได้";
+  };
   handlers.reminders = d => {
     const list = (d && d.reminders) || [];
     reminderPlaces = (d && d.places) || [];
@@ -305,7 +342,7 @@
       : '<option value="">ยังไม่มีสถานที่ที่บันทึกไว้</option>';
     if (reminderPlaces.includes(keep)) sel.value = keep;
     $("rList").innerHTML = list.length ? list.map(r => `<div class="rem${r.enabled ? "" : " off"}">
-        <div class="rem-main"><span class="small muted">${r.kind === "time" ? `ทุกวัน เวลา ${esc(r.time)}` : `เมื่อถึง ${esc(r.place)}`}</span><b>${esc(r.text)}</b></div>
+        <div class="rem-main"><span class="small muted">${r.kind === "time" ? `ทุกวัน เวลา ${esc(r.time)}` : `เมื่อถึง ${esc(r.place)}${r.pinLat != null ? ` (หมุด ${Math.round(r.pinRadius)} ม.)` : ""}`}</span><b>${esc(r.text)}</b></div>
         <div class="row"><label class="small"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? "checked" : ""}> เปิด</label>
         <button class="btn" type="button" data-rdel="${r.id}">ลบ</button></div></div>`).join("")
       : '<div class="empty">ยังไม่มีการเตือน</div>';
@@ -316,8 +353,16 @@
     const text = $("rText").value.trim(), kind = $("rKind").value, time = $("rTime").value, place = $("rPlace").value;
     if (!text) { $("rStatus").textContent = "พิมพ์ข้อความที่จะให้เตือนก่อน"; return; }
     if (kind === "time" && !/^\d{2}:\d{2}$/.test(time)) { $("rStatus").textContent = "เลือกเวลาที่จะให้เตือน"; return; }
-    if (kind === "place" && !place) { $("rStatus").textContent = "ยังไม่มีสถานที่ให้เลือก ตั้งชื่อสถานที่ด้วยปุ่ม 2 ก่อน"; return; }
     if (!A) { $("rStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    if (kind === "place" && isPin()) {
+      if (!pin) { $("rStatus").textContent = "ปักหมุดบนแผนที่ หรือกด \"ใช้ตำแหน่งปัจจุบัน\" ก่อน"; return; }
+      const label = $("rPinName").value.trim() || "หมุดที่ปักไว้", radius = Math.max(20, +$("rPinRadius").value || 150);
+      A.addPinReminder(text, label, pin.lat, pin.lng, radius);
+      $("rText").value = "";
+      $("rStatus").textContent = `ตั้งเตือนเมื่อถึง ${label} (รัศมี ${radius} ม.) แล้ว ต้องเปิดการบันทึกไว้`;
+      return;
+    }
+    if (kind === "place" && !place) { $("rStatus").textContent = "ยังไม่มีสถานที่ที่บันทึกไว้ เลือก \"ปักหมุดใหม่\" หรือตั้งชื่อสถานที่ด้วยปุ่ม 2 ก่อน"; return; }
     A.addReminder(text, kind, time, place);
     $("rText").value = "";
     $("rStatus").textContent = kind === "time" ? `ตั้งเตือนทุกวันเวลา ${time} แล้ว` : `ตั้งเตือนเมื่อถึง ${place} แล้ว (ต้องเปิดการบันทึกไว้)`;
@@ -332,6 +377,13 @@
     $("bootAllow").hidden = ok;
   }
   $("bootAllow").addEventListener("click", () => A && A.openAppSettings());
+  function renderBattery() {
+    const ok = A && A.batteryUnrestricted ? A.batteryUnrestricted() : false;
+    $("batState").textContent = ok ? "Android จะไม่ปิดแอปเพื่อประหยัดแบต การบันทึกและการเตือนทำงานต่อเนื่อง"
+      : "Android อาจปิดแอปตอนอยู่เบื้องหลังเพื่อประหยัดแบต ทำให้การบันทึกหยุด กดปุ่มด้านล่างแล้วเลือก \"อนุญาต\"";
+    $("batAllow").hidden = ok;
+  }
+  $("batAllow").addEventListener("click", () => A && A.askBatteryUnrestricted && A.askBatteryUnrestricted());
 
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
