@@ -31,6 +31,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final int REQ_LOCATION = 9001;
     private static final int REQ_FOLDER = 9002;
+    private static final int REQ_RESTORE = 9003;
     private static final String START_URL = "https://appassets.androidplatform.net/assets/www/index.html";
 
     private static volatile MainActivity visible;
@@ -164,6 +165,16 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_RESTORE) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+            Uri file = data.getData();
+            io.execute(() -> {
+                try { emit("restored", JSONObject.quote(Backup.restore(this, file))); }
+                catch (Exception e) { emit("restored", JSONObject.quote("กู้ข้อมูลไม่สำเร็จ: " + e.getMessage())); }
+                emitState();
+            });
+            return;
+        }
         if (requestCode != REQ_FOLDER) return;
         if (resultCode == RESULT_OK && data != null && data.getData() != null) {
             try {
@@ -297,6 +308,90 @@ public class MainActivity extends Activity {
                 } catch (SecurityException e) {
                     done.accept(null);
                 }
+            });
+        }
+
+        // ---------- going back to an older version ----------
+
+        /** Older releases, as the "olderVersions" event: [{version, versionCode, url, name, date}] or {error}. */
+        @JavascriptInterface
+        public void listOlderVersions() {
+            net.execute(() -> {
+                try { emit("olderVersions", Updater.olderReleases().toString()); }
+                catch (Exception e) { emit("olderVersions", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            });
+        }
+
+        @JavascriptInterface
+        public void backupNow() {
+            if (locked) return;
+            io.execute(() -> {
+                try { emit("backedUp", "{\"ok\":true,\"path\":" + JSONObject.quote(Backup.export(MainActivity.this)) + "}"); }
+                catch (Exception e) { emit("backedUp", "{\"ok\":false,\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            });
+        }
+
+        @JavascriptInterface
+        public void pickRestore() {
+            if (locked) return;
+            main.post(() -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                        .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
+                try { startActivityForResult(i, REQ_RESTORE); } catch (Exception e) { emit("warn", JSONObject.quote("เปิดหน้าเลือกไฟล์ไม่ได้")); }
+            });
+        }
+
+        /**
+         * Step 1-2 of going back: back up the app's data, stop recording, and download the older APK into the
+         * phone's Download folder (where it can still be opened once this app is uninstalled).
+         * Progress arrives as "downgrade" events: {step, ok, message, backup?, file?}.
+         */
+        @JavascriptInterface
+        public void prepareDowngrade(String url, String name) {
+            if (locked) return;
+            net.execute(() -> {
+                try {
+                    emit("downgrade", "{\"step\":\"backup\",\"ok\":true,\"message\":\"กำลังสำรองข้อมูล…\"}");
+                    String backup = Backup.export(MainActivity.this);
+                    main.post(() -> { if (TrackingService.recording(MainActivity.this)) TrackingService.stop(MainActivity.this); });
+                    android.app.DownloadManager dm = getSystemService(android.app.DownloadManager.class);
+                    android.app.DownloadManager.Request req = new android.app.DownloadManager.Request(Uri.parse(url))
+                            .setTitle(name).setMimeType("application/vnd.android.package-archive")
+                            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name);
+                    long id = dm.enqueue(req);
+                    for (int t = 0; t < 600; t++) { // up to 10 minutes
+                        try (android.database.Cursor q = dm.query(new android.app.DownloadManager.Query().setFilterById(id))) {
+                            if (q != null && q.moveToFirst()) {
+                                int st = q.getInt(q.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_STATUS));
+                                long done = q.getLong(q.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                                long total = q.getLong(q.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                                if (st == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                                    JSONObject o = new JSONObject();
+                                    o.put("step", "ready"); o.put("ok", true); o.put("backup", backup); o.put("file", "Download/" + name);
+                                    emit("downgrade", o.toString());
+                                    return;
+                                }
+                                if (st == android.app.DownloadManager.STATUS_FAILED) throw new Exception("ดาวน์โหลดไม่สำเร็จ");
+                                int pct = total > 0 ? (int) (done * 100 / total) : 0;
+                                emit("downgrade", "{\"step\":\"download\",\"ok\":true,\"message\":\"กำลังดาวน์โหลด " + pct + "%\"}");
+                            }
+                        }
+                        Thread.sleep(1000);
+                    }
+                    throw new Exception("ดาวน์โหลดนานเกินไป");
+                } catch (Exception e) {
+                    emit("downgrade", "{\"step\":\"error\",\"ok\":false,\"message\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}");
+                }
+            });
+        }
+
+        /** Step 3: Android's own uninstall prompt for this app. */
+        @JavascriptInterface
+        public void uninstallSelf() {
+            main.post(() -> {
+                try { startActivity(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + getPackageName()))); }
+                catch (Exception e) { emit("warn", JSONObject.quote("เปิดหน้าถอนแอปไม่ได้ ถอนจากตั้งค่าเครื่องแทน")); }
             });
         }
 

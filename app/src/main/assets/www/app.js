@@ -385,6 +385,45 @@
   }
   $("batAllow").addEventListener("click", () => A && A.askBatteryUnrestricted && A.askBatteryUnrestricted());
 
+  // ---------- backup, restore, older versions ----------
+  $("bkNow").addEventListener("click", () => { if (!A) return; $("bkStatus").textContent = "กำลังสำรอง…"; A.backupNow(); });
+  handlers.backedUp = r => { $("bkStatus").textContent = r && r.ok ? `สำรองแล้วที่ ${r.path}` : `สำรองไม่สำเร็จ: ${(r && r.error) || ""}`; };
+  $("bkRestore").addEventListener("click", () => { if (A) A.pickRestore(); });
+  handlers.restored = msg => { $("bkStatus").textContent = msg; pullState(); };
+  let olders = [], dgPick = null;
+  $("dgList").addEventListener("click", () => {
+    if (!A || !A.listOlderVersions) { $("dgVersions").innerHTML = '<p class="small muted">ใช้ได้เฉพาะในแอปบนมือถือ</p>'; return; }
+    $("dgVersions").innerHTML = '<p class="small muted">กำลังดูรายการจาก GitHub…</p>'; A.listOlderVersions();
+  });
+  handlers.olderVersions = list => {
+    if (!Array.isArray(list)) { $("dgVersions").innerHTML = `<p class="small">ดูรายการไม่ได้: ${esc((list && list.error) || "")}</p>`; return; }
+    olders = list;
+    $("dgVersions").innerHTML = list.length ? `<div class="files">${list.map((v, i) =>
+      `<button type="button" data-dg="${i}"><span><b>${esc(v.version)}</b><br><span class="p">${esc(String(v.date).slice(0, 10))}</span></span><span class="small">ย้อนไปเวอร์ชันนี้</span></button>`).join("")}</div>`
+      : '<p class="small muted">ไม่มีเวอร์ชันที่เก่ากว่านี้</p>';
+  };
+  $("dgVersions").addEventListener("click", e => {
+    const b = e.target.closest("[data-dg]"); if (!b) return;
+    dgPick = olders[+b.dataset.dg]; $("dgVer").textContent = dgPick.version; $("mDg").hidden = false;
+  });
+  $("dgGo").addEventListener("click", () => {
+    if (!A || !dgPick) return;
+    $("mDg").hidden = true; $("dgSteps").hidden = false; $("dgHow").hidden = true; $("dgUninstall").hidden = true;
+    $("dgMsg").textContent = "เริ่มแล้ว…";
+    A.prepareDowngrade(dgPick.url, dgPick.name);
+  });
+  handlers.downgrade = d => {
+    if (!d) return;
+    if (d.step === "ready") {
+      $("dgMsg").textContent = `พร้อมย้อนไปเวอร์ชัน ${dgPick ? dgPick.version : ""} แล้ว ทำตามขั้นตอนนี้`;
+      $("dgBackup").textContent = d.backup; $("dgFile").textContent = d.file;
+      $("dgHow").hidden = false; $("dgUninstall").hidden = false;
+    } else {
+      $("dgMsg").textContent = d.ok ? d.message : `ทำต่อไม่ได้: ${d.message} (ข้อมูลในแอปยังอยู่ครบ)`;
+    }
+  };
+  $("dgUninstall").addEventListener("click", () => { if (A) A.uninstallSelf(); });
+
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
   tick(); setInterval(tick, 10000);

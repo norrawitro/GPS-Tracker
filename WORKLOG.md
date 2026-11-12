@@ -51,3 +51,25 @@ The user clarified, through the Manager session:
 ### Checks
 - Browser test with a mock bridge: pin from the current position, pin label and radius, the map drawing the pin and its radius, the reminder list showing pins, and the fallback text when the map cannot load. No errors, no sideways scrolling.
 - Could not load real map tiles here: this session's network blocks tile.openstreetmap.org. On the phone they load over its own connection.
+
+## 2026-11-12 (later): going back to an older version, release
+
+Request (relayed): a button to go back to an older version; release when done.
+
+### What Android allows
+- Android refuses to install an APK with a lower `versionCode` over the installed app (`INSTALL_FAILED_VERSION_DOWNGRADE`). Only adb with `-d` on a debuggable build, or a system app, can bypass it. An ordinary app cannot.
+- Rebuilding an old version with a higher number would not help either: the old code expects database version 1 or 2, and Android refuses to open the current version-3 database with an older helper (`onDowngrade` throws).
+- So the only working route is to uninstall, then install the older APK. **Uninstalling deletes the app's own data**: saved places, reminders, settings and the app password. The route CSV files in Documents/GPS-Track are not app data and stay.
+
+### What was built
+- Settings → "สำรองข้อมูลในแอป": backs up places, reminders and settings to `Documents/GPS-Track/backup/gps-tracker-backup-<date>.json`, and "กู้ข้อมูลจากไฟล์สำรอง" restores one picked with the system file picker. Places already present are skipped, and reminders already present are not duplicated.
+- Settings → "ย้อนกลับไปเวอร์ชันเก่า": lists older releases from GitHub. After a confirmation that spells out what is lost, it:
+  1. always backs up first;
+  2. stops recording;
+  3. downloads the chosen APK into the phone's Download folder with Android's download manager, so it can still be opened once this app is gone;
+  4. shows the remaining steps and a "ถอนแอปนี้" button that opens Android's uninstall prompt.
+  The person then taps the downloaded file to install it. If anything fails before the uninstall, nothing is lost.
+- Older versions have no restore button. Coming back to this version or later, "กู้ข้อมูลจากไฟล์สำรอง" brings places and reminders back.
+
+### Checks
+- Browser test with a mock bridge: backup, restore, the list of older versions, the confirmation, the progress and ready steps, and the uninstall call. No errors, no sideways scrolling. The earlier reminder and pin tests still pass.

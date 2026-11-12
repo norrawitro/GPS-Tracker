@@ -282,6 +282,29 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <p class="small muted">ถ้าลืมรหัสผ่าน ต้องล้างข้อมูลแอปในตั้งค่าเครื่อง ซึ่งจะลบสถานที่ที่จำไว้ทั้งหมด (ไฟล์ CSV ในโฟลเดอร์ Documents ยังอยู่)</p>
 
     <hr class="sep">
+    <h3>สำรองข้อมูลในแอป</h3>
+    <p class="small muted">สถานที่ที่บันทึกไว้ การเตือน และค่าตั้ง เก็บเป็นไฟล์ใน <span class="mono">Documents/GPS-Track/backup/</span> ไฟล์เส้นทาง CSV ไม่ต้องสำรอง เพราะอยู่ในโฟลเดอร์ Documents อยู่แล้ว</p>
+    <div class="row"><button class="btn" id="bkNow" type="button">สำรองข้อมูลตอนนี้</button><button class="btn" id="bkRestore" type="button">กู้ข้อมูลจากไฟล์สำรอง</button></div>
+    <p class="status-line" id="bkStatus"></p>
+
+    <hr class="sep">
+    <h3>ย้อนกลับไปเวอร์ชันเก่า</h3>
+    <p class="small muted">Android ไม่ยอมติดตั้งเวอร์ชันเก่าทับเวอร์ชันใหม่ ต้องถอนแอปก่อน ซึ่งจะลบสถานที่ การเตือน และค่าตั้งในแอป แอปจะสำรองข้อมูลให้ก่อนเสมอ ไฟล์เส้นทาง CSV ไม่หาย</p>
+    <div class="row"><button class="btn" id="dgList" type="button">ดูเวอร์ชันเก่า</button></div>
+    <div class="tree" id="dgVersions"></div>
+    <div class="card upd" id="dgSteps" hidden>
+      <p class="small" id="dgMsg">-</p>
+      <ol class="small" id="dgHow" hidden>
+        <li>สำรองข้อมูลไว้ที่ <span class="mono" id="dgBackup"></span></li>
+        <li>ดาวน์โหลดเวอร์ชันเก่าไว้ที่ <span class="mono" id="dgFile"></span></li>
+        <li>กด "ถอนแอปนี้" ด้านล่าง</li>
+        <li>เปิดแอปจัดการไฟล์ ไปที่โฟลเดอร์ Download แล้วแตะไฟล์ด้านบนเพื่อติดตั้ง</li>
+        <li>เวอร์ชันเก่าบางรุ่นไม่มีปุ่มกู้ข้อมูล ถ้าอัปเดตกลับมาเวอร์ชันนี้ภายหลัง ใช้ "กู้ข้อมูลจากไฟล์สำรอง" เพื่อเอาสถานที่และการเตือนกลับมา</li>
+      </ol>
+      <div class="row"><button class="btn primary" id="dgUninstall" type="button" hidden>ถอนแอปนี้</button></div>
+    </div>
+
+    <hr class="sep">
     <h3>อัปเดตแอป</h3>
     <p class="small">เวอร์ชันที่ติดตั้ง <b class="mono" id="appVer">-</b></p>
     <div class="row">
@@ -291,6 +314,16 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <p class="status-line" id="updState"></p>
     <p class="small muted">ดาวน์โหลดเวอร์ชันใหม่จาก GitHub แล้วติดตั้งทับ ไฟล์บันทึกและสถานที่ที่จำไว้ยังอยู่ครบ ถ้ากำลังบันทึก ให้กดเริ่มบันทึกใหม่หลังอัปเดต</p>
   </section>
+</div>
+
+<!-- Confirm going back -->
+<div class="modal" id="mDg" hidden role="dialog" aria-modal="true" aria-labelledby="mDgTitle">
+  <div class="dialog">
+    <div class="top"><h2 id="mDgTitle">ย้อนไปเวอร์ชัน <span id="dgVer"></span>?</h2><button class="x" type="button" data-close="mDg" aria-label="ปิด">×</button></div>
+    <p class="small">แอปจะสำรองข้อมูล หยุดการบันทึก และดาวน์โหลดเวอร์ชันนี้ไว้ในโฟลเดอร์ Download จากนั้นต้องถอนแอปนี้แล้วติดตั้งไฟล์ที่ดาวน์โหลดเอง</p>
+    <p class="small"><b>หลังถอนแอป สถานที่ การเตือน และค่าตั้งในแอปจะหายจากเครื่อง</b> (มีไฟล์สำรองไว้ให้) ไฟล์เส้นทาง CSV ไม่หาย</p>
+    <div class="row"><button class="btn primary" id="dgGo" type="button">สำรองและดาวน์โหลด</button><button class="btn" type="button" data-close="mDg">ยกเลิก</button></div>
+  </div>
 </div>
 
 <!-- Button 2: name this place -->

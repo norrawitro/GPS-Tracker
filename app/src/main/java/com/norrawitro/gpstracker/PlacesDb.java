@@ -155,6 +155,34 @@ public class PlacesDb extends SQLiteOpenHelper {
         }
     }
 
+    /** Every saved point, for the backup file. */
+    public JSONArray allPlaces() throws Exception {
+        JSONArray out = new JSONArray();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT name, lat, lng, radius_m, first_saved FROM places ORDER BY id", null)) {
+            while (c.moveToNext()) {
+                JSONObject o = new JSONObject();
+                o.put("name", c.getString(0));
+                o.put("lat", c.getDouble(1));
+                o.put("lng", c.getDouble(2));
+                o.put("radiusM", c.getDouble(3));
+                o.put("firstSaved", c.getString(4));
+                out.put(o);
+            }
+        }
+        return out;
+    }
+
+    /** Adds a saved point unless one with the same name already sits within a metre of it. Returns true when added. */
+    public boolean addIfNew(String name, double lat, double lng, double radiusM, String savedAt) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT lat, lng FROM places WHERE name=?", new String[]{name})) {
+            while (c.moveToNext()) {
+                if (distanceM(lat, lng, c.getDouble(0), c.getDouble(1)) < 1) return false;
+            }
+        }
+        add(name, lat, lng, radiusM, savedAt);
+        return true;
+    }
+
     /** Place names that have at least one saved point, A-Z, for the reminder picker. */
     public JSONArray placeNames() throws Exception {
         JSONArray out = new JSONArray();
