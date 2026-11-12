@@ -108,6 +108,15 @@ body.sheet-open{overflow:hidden}
 .lock{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .lock .dialog{box-shadow:none;border:1px solid var(--line)}
 input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.map{height:260px;border-radius:12px;border:1px solid var(--line);overflow:hidden;background:var(--bg)}
+.big.wide{grid-column:1/-1;min-height:72px}
+.rem{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.rem.off{opacity:.55}
+.rem-main{display:flex;flex-direction:column;min-width:0;flex:1 1 180px}
+.rem-main b{overflow-wrap:anywhere}
+#vRemind{position:fixed;inset:0;z-index:40;border-radius:0;border:0;overflow-y:auto;
+  padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .sep{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.9rem;max-width:calc(100% - 32px)}
 </style>
@@ -144,6 +153,7 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <button class="big" id="b2" type="button"><span class="n">ปุ่ม 2</span><span class="t">บันทึกชื่อสถานที่</span><span class="d">ตั้งชื่อจุดที่อยู่ตอนนี้</span></button>
     <button class="big" id="b3" type="button"><span class="n">ปุ่ม 3</span><span class="t">ไฟล์บันทึก</span><span class="d">ดูเส้นทางแต่ละวัน</span></button>
     <button class="big" id="b4" type="button"><span class="n">ปุ่ม 4</span><span class="t">ตั้งค่า</span><span class="d">ความถี่ จำนวนครั้ง รัศมี</span></button>
+    <button class="big wide" id="b5" type="button"><span class="n">ปุ่ม 5</span><span class="t">เตือนความจำ</span><span class="d">เขียนข้อความ แล้วเลือกให้เตือนตามเวลาหรือสถานที่</span></button>
   </div>
 
   <div class="card upd" id="updBanner" hidden>
@@ -187,6 +197,35 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
   </section>
 
   <!-- SETTINGS (button 4) -->
+  <!-- REMINDERS (button 5) -->
+  <section id="vRemind" class="card" hidden>
+    <div class="row" style="justify-content:space-between"><h2>เตือนความจำ</h2><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div>
+    <div class="field"><label for="rText">ข้อความเตือน</label><input type="text" id="rText" maxlength="200" placeholder="เช่น ซื้อนม, โทรหาลูกค้า"></div>
+    <div class="field"><label for="rKind">เตือนเมื่อ</label>
+      <select id="rKind"><option value="time">ถึงเวลา (ทุกวัน)</option><option value="place">ถึงสถานที่</option></select></div>
+    <div class="field" id="rTimeField"><label for="rTime">เวลา</label><input type="time" id="rTime" value="08:00"></div>
+    <div class="field" id="rPlaceField" hidden>
+      <span class="label">สถานที่</span>
+      <div class="row">
+        <label class="small"><input type="radio" name="rWhere" id="rWhereSaved" value="saved" checked> สถานที่ที่บันทึกไว้</label>
+        <label class="small"><input type="radio" name="rWhere" id="rWherePin" value="pin"> ปักหมุดใหม่</label>
+      </div>
+      <div id="rSavedBox"><select id="rPlace" aria-label="สถานที่ที่บันทึกไว้"></select></div>
+      <div id="rPinBox" class="field" hidden>
+        <div id="rMap" class="map" role="application" aria-label="แผนที่ แตะเพื่อปักหมุด"></div>
+        <div class="row"><button class="btn" id="rHere" type="button">ใช้ตำแหน่งปัจจุบัน</button><span class="small muted mono" id="rPinText">ยังไม่ได้ปักหมุด</span></div>
+        <div class="row">
+          <div class="field" style="flex:1 1 140px"><label for="rPinName">ชื่อหมุด</label><input type="text" id="rPinName" maxlength="60" placeholder="เช่น ร้านขายยา"></div>
+          <div class="field" style="flex:0 1 120px"><label for="rPinRadius">รัศมี (เมตร)</label><input type="number" id="rPinRadius" min="20" max="5000" step="10" value="150" inputmode="numeric"></div>
+        </div>
+        <span class="hint" id="rMapHint">แตะบนแผนที่เพื่อปักหมุด แผนที่ต้องใช้อินเทอร์เน็ต ถ้าไม่มีเน็ตใช้ปุ่ม "ใช้ตำแหน่งปัจจุบัน" แทน</span>
+      </div>
+      <span class="hint">เตือนครั้งเดียวเมื่อเข้าไปในรัศมี ออกไปแล้วกลับมาใหม่จะเตือนอีก ต้องเปิดการบันทึกไว้ และตรวจตามความถี่ที่ตั้งไว้</span></div>
+    <div class="row"><button class="btn primary" id="rAdd" type="button">เพิ่มการเตือน</button><button class="btn" id="rTest" type="button">ลองเสียงและกล่องเตือน</button></div>
+    <p class="status-line" id="rStatus"></p>
+    <div class="tree" id="rList"></div>
+  </section>
+
   <section id="vSettings" class="card" hidden>
     <div class="row" style="justify-content:space-between"><h2>ตั้งค่า</h2><button class="x" type="button" data-sheet-close aria-label="ปิด">×</button></div>
     <div class="field">
@@ -219,6 +258,17 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <div class="row"><button class="btn" id="popupAllow2" type="button">ตั้งค่าแสดงทับแอปอื่น</button><button class="btn" id="notifAllow2" type="button">ตั้งค่าการแจ้งเตือน</button></div>
 
     <hr class="sep">
+    <h3>ให้แอปทำงานตลอด</h3>
+    <p class="small" id="batState">-</p>
+    <div class="row"><button class="btn" id="batAllow" type="button">ไม่จำกัดการใช้แบตเตอรี่</button></div>
+
+    <hr class="sep">
+    <h3>หลังเปิดเครื่องใหม่</h3>
+    <p class="small" id="bootState">-</p>
+    <div class="row"><button class="btn" id="bootAllow" type="button">ตั้งค่าตำแหน่ง → อนุญาตตลอดเวลา</button></div>
+    <p class="small muted">มือถือบางยี่ห้อ เช่น TECNO ต้องเปิด "เริ่มอัตโนมัติ" ของแอปนี้ในตั้งค่าเครื่องด้วย</p>
+
+    <hr class="sep">
     <h3>รหัสผ่านเข้าแอป</h3>
     <p class="small" id="pwState">ยังไม่ได้ตั้งรหัสผ่าน ใครเปิดเครื่องก็เข้าแอปได้</p>
     <div class="field" id="pwCurField" hidden><label for="pwCur">รหัสผ่านปัจจุบัน</label><input type="password" id="pwCur" autocomplete="current-password"></div>
@@ -232,6 +282,29 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <p class="small muted">ถ้าลืมรหัสผ่าน ต้องล้างข้อมูลแอปในตั้งค่าเครื่อง ซึ่งจะลบสถานที่ที่จำไว้ทั้งหมด (ไฟล์ CSV ในโฟลเดอร์ Documents ยังอยู่)</p>
 
     <hr class="sep">
+    <h3>สำรองข้อมูลในแอป</h3>
+    <p class="small muted">สถานที่ที่บันทึกไว้ การเตือน และค่าตั้ง เก็บเป็นไฟล์ใน <span class="mono">Documents/GPS-Track/backup/</span> ไฟล์เส้นทาง CSV ไม่ต้องสำรอง เพราะอยู่ในโฟลเดอร์ Documents อยู่แล้ว</p>
+    <div class="row"><button class="btn" id="bkNow" type="button">สำรองข้อมูลตอนนี้</button><button class="btn" id="bkRestore" type="button">กู้ข้อมูลจากไฟล์สำรอง</button></div>
+    <p class="status-line" id="bkStatus"></p>
+
+    <hr class="sep">
+    <h3>ย้อนกลับไปเวอร์ชันเก่า</h3>
+    <p class="small muted">Android ไม่ยอมติดตั้งเวอร์ชันเก่าทับเวอร์ชันใหม่ ต้องถอนแอปก่อน ซึ่งจะลบสถานที่ การเตือน และค่าตั้งในแอป แอปจะสำรองข้อมูลให้ก่อนเสมอ ไฟล์เส้นทาง CSV ไม่หาย</p>
+    <div class="row"><button class="btn" id="dgList" type="button">ดูเวอร์ชันเก่า</button></div>
+    <div class="tree" id="dgVersions"></div>
+    <div class="card upd" id="dgSteps" hidden>
+      <p class="small" id="dgMsg">-</p>
+      <ol class="small" id="dgHow" hidden>
+        <li>สำรองข้อมูลไว้ที่ <span class="mono" id="dgBackup"></span></li>
+        <li>ดาวน์โหลดเวอร์ชันเก่าไว้ที่ <span class="mono" id="dgFile"></span></li>
+        <li>กด "ถอนแอปนี้" ด้านล่าง</li>
+        <li>เปิดแอปจัดการไฟล์ ไปที่โฟลเดอร์ Download แล้วแตะไฟล์ด้านบนเพื่อติดตั้ง</li>
+        <li>เวอร์ชันเก่าบางรุ่นไม่มีปุ่มกู้ข้อมูล ถ้าอัปเดตกลับมาเวอร์ชันนี้ภายหลัง ใช้ "กู้ข้อมูลจากไฟล์สำรอง" เพื่อเอาสถานที่และการเตือนกลับมา</li>
+      </ol>
+      <div class="row"><button class="btn primary" id="dgUninstall" type="button" hidden>ถอนแอปนี้</button></div>
+    </div>
+
+    <hr class="sep">
     <h3>อัปเดตแอป</h3>
     <p class="small">เวอร์ชันที่ติดตั้ง <b class="mono" id="appVer">-</b></p>
     <div class="row">
@@ -241,6 +314,16 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <p class="status-line" id="updState"></p>
     <p class="small muted">ดาวน์โหลดเวอร์ชันใหม่จาก GitHub แล้วติดตั้งทับ ไฟล์บันทึกและสถานที่ที่จำไว้ยังอยู่ครบ ถ้ากำลังบันทึก ให้กดเริ่มบันทึกใหม่หลังอัปเดต</p>
   </section>
+</div>
+
+<!-- Confirm going back -->
+<div class="modal" id="mDg" hidden role="dialog" aria-modal="true" aria-labelledby="mDgTitle">
+  <div class="dialog">
+    <div class="top"><h2 id="mDgTitle">ย้อนไปเวอร์ชัน <span id="dgVer"></span>?</h2><button class="x" type="button" data-close="mDg" aria-label="ปิด">×</button></div>
+    <p class="small">แอปจะสำรองข้อมูล หยุดการบันทึก และดาวน์โหลดเวอร์ชันนี้ไว้ในโฟลเดอร์ Download จากนั้นต้องถอนแอปนี้แล้วติดตั้งไฟล์ที่ดาวน์โหลดเอง</p>
+    <p class="small"><b>หลังถอนแอป สถานที่ การเตือน และค่าตั้งในแอปจะหายจากเครื่อง</b> (มีไฟล์สำรองไว้ให้) ไฟล์เส้นทาง CSV ไม่หาย</p>
+    <div class="row"><button class="btn primary" id="dgGo" type="button">สำรองและดาวน์โหลด</button><button class="btn" type="button" data-close="mDg">ยกเลิก</button></div>
+  </div>
 </div>
 
 <!-- Button 2: name this place -->
@@ -282,6 +365,8 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
   // Cover the screen before anything renders when the app is locked.
   try { if (window.Android && JSON.parse(Android.state()).locked) document.getElementById("lockScreen").hidden = false; } catch (e) {}
 </script>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<script src="leaflet/leaflet.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

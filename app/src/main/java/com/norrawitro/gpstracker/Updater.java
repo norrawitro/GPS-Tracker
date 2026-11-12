@@ -72,6 +72,38 @@ public final class Updater {
         return out;
     }
 
+    /** Releases older than this build that carry an APK, newest first: [{version, versionCode, url, date}]. */
+    public static JSONArray olderReleases() throws Exception {
+        HttpURLConnection c = open("https://api.github.com/repos/" + BuildConfig.UPDATE_REPO + "/releases?per_page=40");
+        c.setRequestProperty("Accept", "application/vnd.github+json");
+        int code = c.getResponseCode();
+        if (code != 200) throw new Exception("GitHub ตอบกลับรหัส " + code);
+        JSONArray all = new JSONArray(readAll(c.getInputStream()));
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject rel = all.getJSONObject(i);
+            if (rel.optBoolean("prerelease") || rel.optBoolean("draft")) continue;
+            String tag = rel.optString("tag_name", "");
+            int vc = parseCode(tag);
+            if (vc <= 0 || vc >= BuildConfig.VERSION_CODE) continue;
+            JSONArray assets = rel.optJSONArray("assets");
+            if (assets == null) continue;
+            for (int j = 0; j < assets.length(); j++) {
+                JSONObject a = assets.getJSONObject(j);
+                if (!a.optString("name").endsWith(".apk")) continue;
+                JSONObject o = new JSONObject();
+                o.put("version", tag.startsWith("v") ? tag.substring(1) : tag);
+                o.put("versionCode", vc);
+                o.put("url", a.optString("browser_download_url"));
+                o.put("name", a.optString("name"));
+                o.put("date", rel.optString("published_at", ""));
+                out.put(o);
+                break;
+            }
+        }
+        return out;
+    }
+
     static int parseCode(String tag) {
         int dot = tag.lastIndexOf('.');
         String tail = dot >= 0 ? tag.substring(dot + 1) : tag.replaceAll("[^0-9]", "");

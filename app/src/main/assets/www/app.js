@@ -56,7 +56,7 @@
   function pullState() { if (A) { try { handlers.state(JSON.parse(A.state())); } catch {} } }
 
   // ---------- views (buttons 3 and 4) ----------
-  const VIEWS = ["vFiles", "vFile", "vSettings"];
+  const VIEWS = ["vFiles", "vFile", "vSettings", "vRemind"];
   function showView(id) {
     VIEWS.forEach(v => $(v).hidden = v !== id);
     document.body.classList.toggle("sheet-open", !!id);
@@ -182,6 +182,7 @@
 
   // ---------- button 4: settings ----------
   $("b4").addEventListener("click", () => {
+    renderBoot(); renderBattery();
     $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
     updateHint(); $("sStatus").textContent = ""; showView("vSettings");
   });
@@ -256,14 +257,14 @@
   $("lockBtn").addEventListener("click", () => {
     if (!A) return;
     $("lockBtn").disabled = true; $("lockStatus").textContent = "กำลังตรวจ…";
-    setTimeout(() => {
-      const err = A.unlock($("lockPw").value);
-      $("lockBtn").disabled = false;
-      if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
-      $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
-      pullState();
-    }, 30);
+    A.unlockAsync($("lockPw").value); // answered by the "unlocked" event
   });
+  handlers.unlocked = err => {
+    $("lockBtn").disabled = false;
+    if (err) { $("lockStatus").textContent = err; $("lockPw").select(); return; }
+    $("lockScreen").hidden = true; $("lockPw").value = ""; $("lockStatus").textContent = "";
+    pullState();
+  };
   $("lockPw").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("lockBtn").click(); });
   function savePw(remove) {
     if (!A) { $("pwStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
@@ -273,17 +274,155 @@
       if (next !== $("pwNew2").value) { $("pwStatus").textContent = "รหัสผ่านใหม่ 2 ช่องไม่ตรงกัน"; return; }
     }
     $("pwStatus").textContent = "กำลังบันทึก…";
-    setTimeout(() => {
-      const err = A.changePassword(cur, next);
-      if (err) { $("pwStatus").textContent = err; return; }
-      lockEnabled = !remove; renderPw();
-      ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
-      $("pwStatus").textContent = remove ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
-    }, 30);
+    pwRemoving = remove;
+    A.changePasswordAsync(cur, next); // answered by the "pwChanged" event
   }
+  let pwRemoving = false;
+  handlers.pwChanged = err => {
+    if (err) { $("pwStatus").textContent = err; return; }
+    lockEnabled = !pwRemoving; renderPw();
+    ["pwCur", "pwNew", "pwNew2"].forEach(id => $(id).value = "");
+    $("pwStatus").textContent = pwRemoving ? "เอารหัสผ่านออกแล้ว" : "ตั้งรหัสผ่านแล้ว ครั้งหน้าที่เปิดแอปจะต้องใส่รหัสนี้";
+  };
   $("pwSave").addEventListener("click", () => savePw(false));
   $("pwRemove").addEventListener("click", () => savePw(true));
   if (A && A.lockEnabled) { lockEnabled = A.lockEnabled(); renderPw(); }
+
+  // ---------- button 5: reminders (issue #8) ----------
+  let reminderPlaces = [];
+  $("b5").addEventListener("click", () => {
+    showView("vRemind"); $("rStatus").textContent = "";
+    $("rList").innerHTML = '<p class="small muted">กำลังโหลด…</p>';
+    if (A && A.listReminders) A.listReminders(); else handlers.reminders({ reminders: [], places: [] });
+  });
+  function showKind() { const t = $("rKind").value === "time"; $("rTimeField").hidden = !t; $("rPlaceField").hidden = t; showWhere(); }
+  $("rKind").addEventListener("change", showKind);
+
+  // Pin a new place: on a map (OpenStreetMap, needs internet) or at the current position.
+  let pin = null, map = null, marker = null, ring = null;
+  const isPin = () => $("rWherePin").checked;
+  function showWhere() {
+    $("rSavedBox").hidden = isPin(); $("rPinBox").hidden = !isPin();
+    if (isPin() && !$("rPlaceField").hidden) setTimeout(initMap, 30);
+  }
+  ["rWhereSaved", "rWherePin"].forEach(id => $(id).addEventListener("change", showWhere));
+  function initMap() {
+    if (map) { map.invalidateSize(); return; }
+    if (!window.L) { $("rMapHint").textContent = "โหลดแผนที่ไม่ได้ ใช้ปุ่ม \"ใช้ตำแหน่งปัจจุบัน\" แทน"; $("rMap").hidden = true; return; }
+    const start = state.lastAt ? [+state.lastLat, +state.lastLng] : [13.7563, 100.5018];
+    map = L.map("rMap").setView(start, state.lastAt ? 16 : 11);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    map.on("click", e => setPin(e.latlng.lat, e.latlng.lng));
+  }
+  function setPin(lat, lng) {
+    pin = { lat, lng };
+    $("rPinText").textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    if (map && window.L) {
+      const r = +$("rPinRadius").value || 150;
+      if (!marker) { marker = L.marker([lat, lng]).addTo(map); ring = L.circle([lat, lng], { radius: r }).addTo(map); }
+      else { marker.setLatLng([lat, lng]); ring.setLatLng([lat, lng]); ring.setRadius(r); }
+      map.setView([lat, lng], Math.max(map.getZoom(), 16));
+    }
+  }
+  $("rPinRadius").addEventListener("input", () => { if (ring) ring.setRadius(+$("rPinRadius").value || 150); });
+  $("rHere").addEventListener("click", () => {
+    if (!A || !A.currentLocation) { toast("ใช้ได้เฉพาะในแอปบนมือถือ"); return; }
+    $("rHere").disabled = true; $("rPinText").textContent = "กำลังจับตำแหน่ง… (อาจใช้เวลาครึ่งนาที)";
+    A.currentLocation();
+  });
+  handlers.here = h => {
+    $("rHere").disabled = false;
+    if (h && h.ok) setPin(+h.lat, +h.lng); else $("rPinText").textContent = (h && h.error) || "จับตำแหน่งไม่ได้";
+  };
+  handlers.reminders = d => {
+    const list = (d && d.reminders) || [];
+    reminderPlaces = (d && d.places) || [];
+    const sel = $("rPlace"), keep = sel.value;
+    sel.innerHTML = reminderPlaces.length ? reminderPlaces.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+      : '<option value="">ยังไม่มีสถานที่ที่บันทึกไว้</option>';
+    if (reminderPlaces.includes(keep)) sel.value = keep;
+    $("rList").innerHTML = list.length ? list.map(r => `<div class="rem${r.enabled ? "" : " off"}">
+        <div class="rem-main"><span class="small muted">${r.kind === "time" ? `ทุกวัน เวลา ${esc(r.time)}` : `เมื่อถึง ${esc(r.place)}${r.pinLat != null ? ` (หมุด ${Math.round(r.pinRadius)} ม.)` : ""}`}</span><b>${esc(r.text)}</b></div>
+        <div class="row"><label class="small"><input type="checkbox" data-rtoggle="${r.id}" ${r.enabled ? "checked" : ""}> เปิด</label>
+        <button class="btn" type="button" data-rdel="${r.id}">ลบ</button></div></div>`).join("")
+      : '<div class="empty">ยังไม่มีการเตือน</div>';
+  };
+  $("rList").addEventListener("change", e => { const id = e.target.dataset.rtoggle; if (id && A) A.setReminderEnabled(id, e.target.checked); });
+  $("rList").addEventListener("click", e => { const id = e.target.dataset.rdel; if (id && A) { A.deleteReminder(id); toast("ลบการเตือนแล้ว"); } });
+  $("rAdd").addEventListener("click", () => {
+    const text = $("rText").value.trim(), kind = $("rKind").value, time = $("rTime").value, place = $("rPlace").value;
+    if (!text) { $("rStatus").textContent = "พิมพ์ข้อความที่จะให้เตือนก่อน"; return; }
+    if (kind === "time" && !/^\d{2}:\d{2}$/.test(time)) { $("rStatus").textContent = "เลือกเวลาที่จะให้เตือน"; return; }
+    if (!A) { $("rStatus").textContent = "ใช้ได้เฉพาะในแอปบนมือถือ"; return; }
+    if (kind === "place" && isPin()) {
+      if (!pin) { $("rStatus").textContent = "ปักหมุดบนแผนที่ หรือกด \"ใช้ตำแหน่งปัจจุบัน\" ก่อน"; return; }
+      const label = $("rPinName").value.trim() || "หมุดที่ปักไว้", radius = Math.max(20, +$("rPinRadius").value || 150);
+      A.addPinReminder(text, label, pin.lat, pin.lng, radius);
+      $("rText").value = "";
+      $("rStatus").textContent = `ตั้งเตือนเมื่อถึง ${label} (รัศมี ${radius} ม.) แล้ว ต้องเปิดการบันทึกไว้`;
+      return;
+    }
+    if (kind === "place" && !place) { $("rStatus").textContent = "ยังไม่มีสถานที่ที่บันทึกไว้ เลือก \"ปักหมุดใหม่\" หรือตั้งชื่อสถานที่ด้วยปุ่ม 2 ก่อน"; return; }
+    A.addReminder(text, kind, time, place);
+    $("rText").value = "";
+    $("rStatus").textContent = kind === "time" ? `ตั้งเตือนทุกวันเวลา ${time} แล้ว` : `ตั้งเตือนเมื่อถึง ${place} แล้ว (ต้องเปิดการบันทึกไว้)`;
+  });
+  $("rTest").addEventListener("click", () => { if (A && A.testReminder) A.testReminder($("rText").value.trim()); });
+
+  // ---------- after a restart ----------
+  function renderBoot() {
+    const ok = A && A.backgroundLocation ? A.backgroundLocation() : false;
+    $("bootState").textContent = ok ? "เปิดเครื่องใหม่หรืออัปเดตแอปแล้ว จะบันทึกต่อเองอัตโนมัติ"
+      : "ตอนนี้ต้องกดเริ่มบันทึกเองหลังเปิดเครื่องใหม่ ถ้าอยากให้บันทึกต่อเอง ให้อนุญาตตำแหน่งแบบ \"อนุญาตตลอดเวลา\"";
+    $("bootAllow").hidden = ok;
+  }
+  $("bootAllow").addEventListener("click", () => A && A.openAppSettings());
+  function renderBattery() {
+    const ok = A && A.batteryUnrestricted ? A.batteryUnrestricted() : false;
+    $("batState").textContent = ok ? "Android จะไม่ปิดแอปเพื่อประหยัดแบต การบันทึกและการเตือนทำงานต่อเนื่อง"
+      : "Android อาจปิดแอปตอนอยู่เบื้องหลังเพื่อประหยัดแบต ทำให้การบันทึกหยุด กดปุ่มด้านล่างแล้วเลือก \"อนุญาต\"";
+    $("batAllow").hidden = ok;
+  }
+  $("batAllow").addEventListener("click", () => A && A.askBatteryUnrestricted && A.askBatteryUnrestricted());
+
+  // ---------- backup, restore, older versions ----------
+  $("bkNow").addEventListener("click", () => { if (!A) return; $("bkStatus").textContent = "กำลังสำรอง…"; A.backupNow(); });
+  handlers.backedUp = r => { $("bkStatus").textContent = r && r.ok ? `สำรองแล้วที่ ${r.path}` : `สำรองไม่สำเร็จ: ${(r && r.error) || ""}`; };
+  $("bkRestore").addEventListener("click", () => { if (A) A.pickRestore(); });
+  handlers.restored = msg => { $("bkStatus").textContent = msg; pullState(); };
+  let olders = [], dgPick = null;
+  $("dgList").addEventListener("click", () => {
+    if (!A || !A.listOlderVersions) { $("dgVersions").innerHTML = '<p class="small muted">ใช้ได้เฉพาะในแอปบนมือถือ</p>'; return; }
+    $("dgVersions").innerHTML = '<p class="small muted">กำลังดูรายการจาก GitHub…</p>'; A.listOlderVersions();
+  });
+  handlers.olderVersions = list => {
+    if (!Array.isArray(list)) { $("dgVersions").innerHTML = `<p class="small">ดูรายการไม่ได้: ${esc((list && list.error) || "")}</p>`; return; }
+    olders = list;
+    $("dgVersions").innerHTML = list.length ? `<div class="files">${list.map((v, i) =>
+      `<button type="button" data-dg="${i}"><span><b>${esc(v.version)}</b><br><span class="p">${esc(String(v.date).slice(0, 10))}</span></span><span class="small">ย้อนไปเวอร์ชันนี้</span></button>`).join("")}</div>`
+      : '<p class="small muted">ไม่มีเวอร์ชันที่เก่ากว่านี้</p>';
+  };
+  $("dgVersions").addEventListener("click", e => {
+    const b = e.target.closest("[data-dg]"); if (!b) return;
+    dgPick = olders[+b.dataset.dg]; $("dgVer").textContent = dgPick.version; $("mDg").hidden = false;
+  });
+  $("dgGo").addEventListener("click", () => {
+    if (!A || !dgPick) return;
+    $("mDg").hidden = true; $("dgSteps").hidden = false; $("dgHow").hidden = true; $("dgUninstall").hidden = true;
+    $("dgMsg").textContent = "เริ่มแล้ว…";
+    A.prepareDowngrade(dgPick.url, dgPick.name);
+  });
+  handlers.downgrade = d => {
+    if (!d) return;
+    if (d.step === "ready") {
+      $("dgMsg").textContent = `พร้อมย้อนไปเวอร์ชัน ${dgPick ? dgPick.version : ""} แล้ว ทำตามขั้นตอนนี้`;
+      $("dgBackup").textContent = d.backup; $("dgFile").textContent = d.file;
+      $("dgHow").hidden = false; $("dgUninstall").hidden = false;
+    } else {
+      $("dgMsg").textContent = d.ok ? d.message : `ทำต่อไม่ได้: ${d.message} (ข้อมูลในแอปยังอยู่ครบ)`;
+    }
+  };
+  $("dgUninstall").addEventListener("click", () => { if (A) A.uninstallSelf(); });
 
   // ---------- clock ----------
   function tick() { $("clock").textContent = hm(Date.now()); }
