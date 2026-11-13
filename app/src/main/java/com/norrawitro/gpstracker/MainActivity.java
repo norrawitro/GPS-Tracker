@@ -100,6 +100,7 @@ public class MainActivity extends Activity {
             Updater.install(this, apk);
         }
         if (pageReady) { emitLock(); emitState(); emitPendingAsk(); }
+        StatusLink.onOpen(this);
     }
 
     @Override
@@ -137,6 +138,12 @@ public class MainActivity extends Activity {
     private void emitPendingAsk() {
         String pend = TrackingService.prefs(this).getString("pending", null);
         if (!locked && pend != null && TrackingService.recording(this)) emit("ask", pend);
+    }
+
+    /** Sends the status-link settings and log to the page if the app is on screen. */
+    static void pushLink(Context c) {
+        MainActivity a = visible;
+        if (a != null && a.pageReady && !a.locked) a.emit("link", StatusLink.info(c).toString());
     }
 
     /** Sends the current state to the page if the app is on screen. */
@@ -319,6 +326,50 @@ public class MainActivity extends Activity {
             net.execute(() -> {
                 try { emit("olderVersions", Updater.olderReleases().toString()); }
                 catch (Exception e) { emit("olderVersions", "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"); }
+            });
+        }
+
+        // ---------- status link with GitHub ----------
+
+        @JavascriptInterface
+        public void linkInfo() {
+            if (locked) return;
+            emit("link", StatusLink.info(MainActivity.this).toString());
+        }
+
+        @JavascriptInterface
+        public void linkSave(String repo, String token, String key, int everyMin) {
+            if (locked) return;
+            io.execute(() -> {
+                String err = StatusLink.save(MainActivity.this, repo, token, key, everyMin);
+                emit("linkSaved", "{\"ok\":" + (err == null) + ",\"error\":" + JSONObject.quote(err == null ? "" : err) + "}");
+                emit("link", StatusLink.info(MainActivity.this).toString());
+            });
+        }
+
+        @JavascriptInterface
+        public void linkCheck() {
+            if (locked) return;
+            StatusLink.checkAsync(MainActivity.this, "กดตรวจในแอป");
+        }
+
+        @JavascriptInterface
+        public void linkSend() {
+            if (locked) return;
+            StatusLink.sendAsync(MainActivity.this, "กดส่งในแอป");
+        }
+
+        @JavascriptInterface
+        public void linkClear() {
+            if (locked) return;
+            StatusLink.clearSecrets(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void openUsageAccess() {
+            main.post(() -> {
+                try { startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)); }
+                catch (Exception ignored) {}
             });
         }
 

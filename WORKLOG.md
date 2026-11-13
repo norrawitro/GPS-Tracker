@@ -73,3 +73,42 @@ Request (relayed): a button to go back to an older version; release when done.
 
 ### Checks
 - Browser test with a mock bridge: backup, restore, the list of older versions, the confirmation, the progress and ready steps, and the uninstall call. No errors, no sideways scrolling. The earlier reminder and pin tests still pass.
+
+## 2026-11-13: status link with GitHub
+
+Request: the owner asked through Manager for a two-way GitHub link so they can check the app's status. In this session they then said to decide the open questions myself and build the new version as fast as possible ("รีบจัดทำเวอร์ชั่นใหม่ของ app มาโดยเร็วที่สุด").
+
+### Decisions
+- **Repo:** typed into the app (owner/name). The owner creates it and has not fixed the name yet. The app never creates a repo.
+- **Token and AES key:** typed into the app.
+  - They are sealed with an AES-GCM key kept in the Android Keystore, and are never shown again.
+  - They are not in code, any repo, any chat room, the log or the backup file.
+- **Command channel:** any file in `commands/` is a command (names starting with a dot are skipped). The app looks for one:
+  - when the app comes on screen, at most once a minute;
+  - on "ตรวจคำสั่งตอนนี้";
+  - while recording, at most once per N minutes (default 15; 0 turns this off). This check rides on the existing GPS fix and adds no wake-ups.
+  When it finds one, it uploads the status, then deletes the command file.
+- **No sending on a timer:** status goes up only for a command, or on "ส่งสถานะตอนนี้".
+- **Files:** `status/YYYY-MM-DD/HHmmss.enc` keeps the history, and `status/latest.enc` is overwritten each time.
+- **Encryption:** the same as NRW `chat.sh`.
+  - OpenSSL AES-256-CBC, PBKDF2-SHA256 with 200000 iterations, "Salted__" header, base64 on one line.
+  - The owner decrypts with `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -a -A -pass pass:KEY -in latest.enc`.
+- **Battery voltage:** almost every phone reports it as `EXTRA_VOLTAGE` of `ACTION_BATTERY_CHANGED`, in mV, with no permission.
+  - A few phones report volts, so values under 100 are multiplied by 1000.
+  - Current (mA) comes from `BATTERY_PROPERTY_CURRENT_NOW` where the phone supports it, and is null otherwise.
+- **Status contents:**
+  - **App and phone:** version, device, Android version.
+  - **Battery:** %, mV, °C, charging, plugged, health, mA, power saver, unrestricted.
+  - **Times:** phone on, app running, recording time and start, time on screen today. Time on screen needs the optional "usage access" permission and is null without it.
+  - **Recording:** on or off, interval, number of fixes, last fix with its position and place, next fix, last error.
+  - **Permissions.**
+  - **Data:** counts of places and reminders, free storage, network type.
+- **Log:** the last 30 actions and failures, with their causes, are under "บันทึกการทำงาน" in settings. The log never holds the token or the key.
+
+### Checks
+- **Encryption:** the encryption code, run on the desktop JDK, decrypted correctly with `openssl enc -d ... -iter 200000 -a -A` (OpenSSL 3.0.13), Thai text included.
+- **Settings page:** browser test with a mock bridge.
+  - Covered save (token and key fields clear afterwards), the ready state, send, check and usage access.
+  - No errors and no sideways scrolling. The downgrade test still passes.
+- **Not tested:** against a real GitHub repo, which does not exist yet and I hold no token for, and on a real phone.
+- **Push:** a force push to reset the branch onto main was blocked. Instead I merged the old branch history, which is already in main through the squash-merge of #9, so nothing was overwritten.
