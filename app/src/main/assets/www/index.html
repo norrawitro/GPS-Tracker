@@ -282,6 +282,26 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <p class="small muted">ถ้าลืมรหัสผ่าน ต้องล้างข้อมูลแอปในตั้งค่าเครื่อง ซึ่งจะลบสถานที่ที่จำไว้ทั้งหมด (ไฟล์ CSV ในโฟลเดอร์ Documents ยังอยู่)</p>
 
     <hr class="sep">
+    <h3>ส่งสถานะขึ้น GitHub</h3>
+    <p class="small muted">แอปส่งสถานะเฉพาะเมื่อมีไฟล์คำสั่งในโฟลเดอร์ <span class="mono">commands/</span> ของ repo หรือเมื่อกด "ส่งสถานะตอนนี้" ไม่มีการส่งเองตามเวลา ไฟล์ที่ส่งขึ้นไปถูกเข้ารหัส AES-256 ทุกไฟล์</p>
+    <p class="small" id="lkState">-</p>
+    <div class="field"><label for="lkRepo">repo (เจ้าของ/ชื่อ)</label><input type="text" id="lkRepo" placeholder="norrawitro/ชื่อ-repo" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    <div class="field"><label for="lkToken" id="lkTokenLabel">GitHub token (fine-grained เฉพาะ repo นี้)</label><input type="password" id="lkToken" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label for="lkKey" id="lkKeyLabel">กุญแจเข้ารหัส (อย่างน้อย 16 ตัว ใช้ตัวอังกฤษหรือตัวเลข)</label><input type="password" id="lkKey" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label for="lkEvery">ระหว่างบันทึก ตรวจไฟล์คำสั่งทุกกี่นาที (0 = ตรวจเฉพาะตอนเปิดแอป)</label><input type="number" id="lkEvery" min="0" max="1440" inputmode="numeric"></div>
+    <div class="row">
+      <button class="btn primary" id="lkSave" type="button">บันทึก</button>
+      <button class="btn" id="lkCheck" type="button">ตรวจคำสั่งตอนนี้</button>
+      <button class="btn" id="lkSend" type="button">ส่งสถานะตอนนี้</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="lkUsage" type="button">อนุญาตดูเวลาใช้งาน</button>
+      <button class="btn" id="lkClear" type="button">ลบ token และกุญแจ</button>
+    </div>
+    <p class="status-line" id="lkStatus"></p>
+    <details class="small"><summary>บันทึกการทำงาน</summary><ol class="small mono" id="lkLog"></ol></details>
+
+    <hr class="sep">
     <h3>สำรองข้อมูลในแอป</h3>
     <p class="small muted">สถานที่ที่บันทึกไว้ การเตือน และค่าตั้ง เก็บเป็นไฟล์ใน <span class="mono">Documents/GPS-Track/backup/</span> ไฟล์เส้นทาง CSV ไม่ต้องสำรอง เพราะอยู่ในโฟลเดอร์ Documents อยู่แล้ว</p>
     <div class="row"><button class="btn" id="bkNow" type="button">สำรองข้อมูลตอนนี้</button><button class="btn" id="bkRestore" type="button">กู้ข้อมูลจากไฟล์สำรอง</button></div>

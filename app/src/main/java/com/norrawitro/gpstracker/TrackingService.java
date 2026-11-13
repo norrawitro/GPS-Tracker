@@ -110,7 +110,7 @@ public class TrackingService extends Service {
     // ---------- start / stop ----------
 
     static void start(Context c) {
-        prefs(c).edit().putBoolean("recording", true).putInt("count", 0).remove("pending").remove("lastError")
+        prefs(c).edit().putBoolean("recording", true).putLong("recStartedAt", System.currentTimeMillis()).putInt("count", 0).remove("pending").remove("lastError")
                 .remove("anchorLat").remove("anchorLng").apply();
         c.startForegroundService(new Intent(c, TrackingService.class).setAction(ACTION_START));
     }
@@ -300,6 +300,7 @@ public class TrackingService extends Service {
      */
     private void onFix(long at, double lat, double lng) {
         io.execute(() -> Reminders.onFix(this, lat, lng)); // place reminders (issue #8)
+        StatusLink.onFix(this); // looks for an owner command at most every few minutes
         SharedPreferences p = prefs(this);
         p.edit().putLong("lastAt", at)
                 .putLong("lastLat", Double.doubleToRawLongBits(lat)).putLong("lastLng", Double.doubleToRawLongBits(lng))

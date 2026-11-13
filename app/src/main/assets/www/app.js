@@ -184,7 +184,7 @@
   $("b4").addEventListener("click", () => {
     renderBoot(); renderBattery();
     $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
-    updateHint(); $("sStatus").textContent = ""; showView("vSettings");
+    updateHint(); $("sStatus").textContent = ""; showView("vSettings"); if (A && A.linkInfo) A.linkInfo();
   });
   function updateHint() {
     const m = +$("sInterval").value * Math.max(1, +$("sCheck").value || 1);
@@ -386,6 +386,38 @@
   $("batAllow").addEventListener("click", () => A && A.askBatteryUnrestricted && A.askBatteryUnrestricted());
 
   // ---------- backup, restore, older versions ----------
+  // ---------- status link with GitHub ----------
+  const fmtT = t => t ? new Date(t).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "ยังไม่เคย";
+  let lkFilled = false;
+  handlers.link = i => {
+    if (!i) return;
+    if (!lkFilled) { $("lkRepo").value = i.repo || ""; $("lkEvery").value = i.everyMin; lkFilled = true; }
+    $("lkTokenLabel").textContent = "GitHub token (fine-grained เฉพาะ repo นี้)" + (i.hasToken ? " - มีแล้ว เว้นว่างไว้ถ้าไม่เปลี่ยน" : "");
+    $("lkKeyLabel").textContent = "กุญแจเข้ารหัส (อย่างน้อย 16 ตัว ใช้ตัวอังกฤษหรือตัวเลข)" + (i.hasKey ? " - มีแล้ว เว้นว่างไว้ถ้าไม่เปลี่ยน" : "");
+    $("lkState").textContent = i.ready
+      ? `พร้อมใช้ ตรวจคำสั่งล่าสุด ${fmtT(i.lastCheck)} ส่งสถานะล่าสุด ${fmtT(i.lastSent)}`
+      : "ยังไม่พร้อม ใส่ repo, token และกุญแจให้ครบ";
+    $("lkUsage").textContent = i.usageAllowed ? "ดูเวลาใช้งาน: อนุญาตแล้ว" : "อนุญาตดูเวลาใช้งาน";
+    ["lkCheck", "lkSend"].forEach(id => $(id).disabled = !i.ready);
+    const ol = $("lkLog"); ol.textContent = "";
+    (i.log || []).forEach(t => { const li = document.createElement("li"); li.textContent = t; ol.appendChild(li); });
+    if (i.log && i.log.length && $("lkStatus").dataset.wait) { $("lkStatus").textContent = i.log[0].replace(/^\S+\s+\S+\s+/, ""); delete $("lkStatus").dataset.wait; }
+  };
+  handlers.linkSaved = r => {
+    $("lkStatus").textContent = r && r.ok ? "บันทึกแล้ว" : `บันทึกไม่สำเร็จ: ${(r && r.error) || ""}`;
+    if (r && r.ok) { $("lkToken").value = ""; $("lkKey").value = ""; }
+  };
+  $("lkSave").addEventListener("click", () => {
+    if (!A) return;
+    const every = parseInt($("lkEvery").value, 10);
+    $("lkStatus").textContent = "กำลังบันทึก…";
+    A.linkSave($("lkRepo").value.trim(), $("lkToken").value, $("lkKey").value, isNaN(every) ? 15 : every);
+  });
+  $("lkCheck").addEventListener("click", () => { if (!A) return; $("lkStatus").textContent = "กำลังตรวจ…"; $("lkStatus").dataset.wait = 1; A.linkCheck(); });
+  $("lkSend").addEventListener("click", () => { if (!A) return; $("lkStatus").textContent = "กำลังส่ง…"; $("lkStatus").dataset.wait = 1; A.linkSend(); });
+  $("lkUsage").addEventListener("click", () => A && A.openUsageAccess());
+  $("lkClear").addEventListener("click", () => { if (A && confirm("ลบ token และกุญแจออกจากเครื่องนี้?")) A.linkClear(); });
+
   $("bkNow").addEventListener("click", () => { if (!A) return; $("bkStatus").textContent = "กำลังสำรอง…"; A.backupNow(); });
   handlers.backedUp = r => { $("bkStatus").textContent = r && r.ok ? `สำรองแล้วที่ ${r.path}` : `สำรองไม่สำเร็จ: ${(r && r.error) || ""}`; };
   $("bkRestore").addEventListener("click", () => { if (A) A.pickRestore(); });
