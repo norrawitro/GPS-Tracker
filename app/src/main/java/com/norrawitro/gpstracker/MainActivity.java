@@ -101,6 +101,10 @@ public class MainActivity extends Activity {
         }
         if (pageReady) { emitLock(); emitState(); emitPendingAsk(); }
         StatusLink.onOpen(this);
+        // Speed alert was on but the service is gone (force close, or it could not start after a restart): start it again.
+        if (SpeedAlert.active(this) && TrackingService.instance == null && TrackingService.hasLocationPermission(this)) {
+            try { TrackingService.applySpeed(this); } catch (Exception ignored) {}
+        }
     }
 
     @Override
@@ -516,6 +520,25 @@ public class MainActivity extends Activity {
                     requestNeededPermissions();
                 }
             });
+        }
+
+        /** The "Speed alert" button. */
+        @JavascriptInterface
+        public void toggleSpeed() {
+            if (locked) return;
+            main.post(() -> {
+                boolean on = !SpeedAlert.on(MainActivity.this);
+                if (on && !TrackingService.hasLocationPermission(MainActivity.this)) { requestNeededPermissions(); return; }
+                TrackingService.setSpeed(MainActivity.this, on);
+                emitState();
+            });
+        }
+
+        /** Speed limit from Settings, km/h. */
+        @JavascriptInterface
+        public void setSpeedLimit(int kmh) {
+            if (locked) return;
+            main.post(() -> { TrackingService.setSpeedLimit(MainActivity.this, kmh); emitState(); });
         }
 
         /** Button 2: name the current place. */

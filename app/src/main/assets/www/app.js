@@ -35,6 +35,11 @@
     $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง` + (s.battery >= 0 ? ` · แบตตอนบันทึกล่าสุด ${s.battery}%` : "");
     $("b1").classList.toggle("primary", !on); $("b1").classList.toggle("stop", on);
     $("b1t").textContent = on ? "หยุดบันทึก" : "เริ่มบันทึก";
+    const sp = !!s.speedOn, lim = +s.speedLimit || 0;
+    $("b6").classList.toggle("primary", sp && lim > 0); $("b6").setAttribute("aria-pressed", String(sp));
+    $("b6d").textContent = !sp ? (lim > 0 ? `ปิดอยู่ · ตั้งไว้ ${lim} กม./ชม.` : "ปิดอยู่")
+      : lim <= 0 ? "ใส่ความเร็วในตั้งค่าก่อน"
+      : `เปิด · เกิน ${lim} กม./ชม.` + (s.speedNow >= 0 ? ` · ตอนนี้ ${s.speedNow}` : "");
     $("b1d").textContent = on ? "หยุดจับพิกัดและการทำงานเบื้องหลัง" : "เริ่มจับพิกัดตามความถี่ที่ตั้งไว้";
     $("permCard").hidden = s.permission !== false || on;
     const needPopup = s.overlay === false, needNotif = s.notifications === false;
@@ -180,10 +185,18 @@
   document.querySelectorAll("[data-sheet-close]").forEach(b => b.addEventListener("click", () => showView(null)));
   $("shareFile").addEventListener("click", () => { if (A && current) A.shareFile(String(current.id), current.name); });
 
+  // ---------- button 6: Speed alert ----------
+  $("b6").addEventListener("click", () => {
+    if (!A) return;
+    if (!state.speedOn && !(+state.speedLimit > 0)) { toast("ใส่ความเร็วที่ต้องการให้เตือนในตั้งค่า (ปุ่ม 4) ก่อน"); }
+    A.toggleSpeed();
+  });
+
   // ---------- button 4: settings ----------
   $("b4").addEventListener("click", () => {
     renderBoot(); renderBattery();
     $("sInterval").value = String(state.intervalMin); $("sCheck").value = state.checkEvery; $("sRadius").value = state.radiusM;
+    $("sSpeed").value = +state.speedLimit > 0 ? state.speedLimit : "";
     updateHint(); $("sStatus").textContent = ""; showView("vSettings"); if (A && A.linkInfo) A.linkInfo();
   });
   function updateHint() {
@@ -195,7 +208,10 @@
     const interval = +$("sInterval").value, check = Math.round(+$("sCheck").value), radius = Math.round(+$("sRadius").value);
     if (!(check >= 1 && check <= 999)) { $("sStatus").textContent = "จำนวนครั้งต้องอยู่ระหว่าง 1 ถึง 999"; return; }
     if (!(radius >= 5 && radius <= 50000)) { $("sStatus").textContent = "รัศมีต้องอยู่ระหว่าง 5 ถึง 50,000 เมตร"; return; }
-    if (A) A.setSettings(interval, check, radius);
+    const speedRaw = $("sSpeed").value.trim(), speed = speedRaw === "" ? 0 : Math.round(+speedRaw);
+    if (speedRaw !== "" && !(speed >= 1 && speed <= 400)) { $("sStatus").textContent = "ความเร็วต้องอยู่ระหว่าง 1 ถึง 400 กม./ชม."; return; }
+    if (A) { A.setSettings(interval, check, radius); A.setSpeedLimit(speed); }
+    state = { ...state, speedLimit: speed };
     state = { ...state, intervalMin: interval, checkEvery: check, radiusM: radius }; render();
     $("sStatus").textContent = state.recording ? "บันทึกแล้ว ใช้ตั้งแต่รอบการบันทึกถัดไป" : "บันทึกแล้ว";
   });

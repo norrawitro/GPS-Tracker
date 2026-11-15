@@ -153,7 +153,8 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
     <button class="big" id="b2" type="button"><span class="n">ปุ่ม 2</span><span class="t">บันทึกชื่อสถานที่</span><span class="d">ตั้งชื่อจุดที่อยู่ตอนนี้</span></button>
     <button class="big" id="b3" type="button"><span class="n">ปุ่ม 3</span><span class="t">ไฟล์บันทึก</span><span class="d">ดูเส้นทางแต่ละวัน</span></button>
     <button class="big" id="b4" type="button"><span class="n">ปุ่ม 4</span><span class="t">ตั้งค่า</span><span class="d">ความถี่ จำนวนครั้ง รัศมี</span></button>
-    <button class="big wide" id="b5" type="button"><span class="n">ปุ่ม 5</span><span class="t">เตือนความจำ</span><span class="d">เขียนข้อความ แล้วเลือกให้เตือนตามเวลาหรือสถานที่</span></button>
+    <button class="big" id="b5" type="button"><span class="n">ปุ่ม 5</span><span class="t">เตือนความจำ</span><span class="d">เตือนตามเวลาหรือสถานที่</span></button>
+    <button class="big" id="b6" type="button" aria-pressed="false"><span class="n">ปุ่ม 6</span><span class="t">Speed alert</span><span class="d" id="b6d">ปิดอยู่</span></button>
   </div>
 
   <div class="card upd" id="updBanner" hidden>
@@ -248,6 +249,11 @@ input[type=password]{width:100%;font:inherit;color:var(--ink);background:var(--b
       <label for="sRadius">รัศมีจับคู่สถานที่ (เมตร)</label>
       <input type="number" id="sRadius" min="5" max="50000" step="5" inputmode="numeric" value="100">
       <span class="hint">ถ้าอยู่ห่างจากจุดที่เคยตั้งชื่อไม่เกินระยะนี้ จะใช้ชื่อเดิมโดยไม่ถาม และใช้ตัดสินว่ายังอยู่ที่เดิมหรือเคลื่อนที่ไปแล้ว</span>
+    </div>
+    <div class="field">
+      <label for="sSpeed">Speed alert: ส่งเสียงเตือนเมื่อเร็วเกิน (กม./ชม.)</label>
+      <input type="number" id="sSpeed" min="1" max="400" step="1" inputmode="numeric" placeholder="ใส่ตัวเลข">
+      <span class="hint">เปิดหรือปิดการเตือนด้วยปุ่ม 6 "Speed alert" ที่หน้าหลัก ขณะเปิดอยู่ แอปจะอ่าน GPS ทุกวินาทีและใช้แบตมากขึ้น</span>
     </div>
     <div class="row"><button class="btn primary" id="sSave" type="button">บันทึกการตั้งค่า</button></div>
     <p class="status-line" id="sStatus"></p>

@@ -26,7 +26,14 @@ public class BootReceiver extends BroadcastReceiver {
         String action = String.valueOf(intent.getAction());
         boolean restart = action.endsWith("BOOT_COMPLETED") || action.endsWith("QUICKBOOT_POWERON")
                 || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action);
-        if (!restart || !TrackingService.recording(c) || TrackingService.instance != null) return;
+        if (!restart || TrackingService.instance != null) return;
+        if (!TrackingService.recording(c)) {
+            // Only Speed alert was on: start it again quietly when Android allows it.
+            if (SpeedAlert.active(c) && TrackingService.hasLocationPermission(c) && backgroundLocation(c)) {
+                try { TrackingService.applySpeed(c); } catch (Exception ignored) {}
+            }
+            return;
+        }
 
         if (TrackingService.hasLocationPermission(c) && backgroundLocation(c)) {
             try {
