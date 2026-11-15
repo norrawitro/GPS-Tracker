@@ -112,3 +112,36 @@ Request: the owner asked through Manager for a two-way GitHub link so they can c
   - No errors and no sideways scrolling. The downgrade test still passes.
 - **Not tested:** against a real GitHub repo, which does not exist yet and I hold no token for, and on a real phone.
 - **Push:** a force push to reset the branch onto main was blocked. Instead I merged the old branch history, which is already in main through the squash-merge of #9, so nothing was overwritten.
+
+## 2026-11-15: Speed alert
+
+Request: owner order relayed by Manager on 2026-11-15.
+- A "Speed alert" button that turns the alert on and off.
+- One speed number (km/h), typed in Settings and saved with that screen's save button. No fixed values.
+- Above that speed, a short beep-beep. Sound only: no text, no popup.
+
+### What was built
+- **Button 6 "Speed alert"** on the main screen. It shows on or off, the limit, and the current speed.
+- **Settings:** a new "Speed alert" field in km/h (1 to 400). The existing "บันทึกการตั้งค่า" button saves it. Empty means not set.
+- **Service:** reuses the existing location foreground service, `TrackingService`.
+  - While the alert is on and a limit is set, the service asks the GPS for a reading every second, through `SpeedAlert`.
+  - The service keeps running for the alert even when route recording is off. Its notification then says "Speed alert เปิดอยู่".
+  - Stopping recording does not stop the alert, and turning the alert off does not stop recording.
+- **Sound:** two short 1760 Hz beeps (110 ms each, 80 ms apart), made in code.
+  - They play on the navigation-guidance audio stream, so they sound over music like a navigation app.
+  - While still over the limit, they repeat every 10 s. After the speed drops to the limit or below, the next time over beeps at once.
+  - Readings the phone marks as worse than ±5 m/s are ignored.
+- **Restart:** after a phone restart or an app update, the alert starts again if it was on and "allow all the time" location is granted. Opening the app also starts it again if the service had been killed.
+
+### Decision taken without an answer yet
+- I asked the owner: repeat every 10 s while over the limit (a), or beep once per time over (b)? No answer came before building, so I built (a), which I had recommended. Changing to (b) is one line, `REPEAT_MS`.
+
+### Checks
+- **Browser test** with a mock bridge:
+  - button 6 with no limit set, which shows a hint;
+  - an invalid limit (999) is rejected;
+  - saving 80;
+  - turning the alert on, which shows "เปิด · เกิน 80 กม./ชม. · ตอนนี้ 72";
+  - the field shows the saved value again.
+  - No errors and no sideways scrolling. The earlier status-link and reminder tests still pass.
+- **Not tested:** the Java builds in CI. I have not tried it on a real phone or while driving.

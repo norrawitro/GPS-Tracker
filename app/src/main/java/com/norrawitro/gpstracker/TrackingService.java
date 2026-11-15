@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 public class TrackingService extends Service {
     static final String ACTION_START = "start";
     static final String ACTION_CAPTURE = "capture";
+    static final String ACTION_SPEED = "speed";
     static final String KEY_REPLY = "place_name";
 
     private static final String CH_RUN = "tracking_v1";
@@ -50,6 +51,7 @@ public class TrackingService extends Service {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private PowerManager.WakeLock wake;
     private WherePopup popup;
+    private SpeedAlert speed;
     private boolean fixing;
 
     public interface FixCallback { void onFix(Location loc, String error); }
@@ -98,6 +100,10 @@ public class TrackingService extends Service {
             o.put("battery", p.getInt("battery", -1));
             o.put("nextAt", p.getLong("nextAt", 0));
             o.put("lastError", p.getString("lastError", ""));
+            o.put("speedOn", SpeedAlert.on(c));
+            o.put("speedLimit", SpeedAlert.limit(c));
+            o.put("speedNow", instance != null && instance.speed != null && instance.speed.running() ? p.getInt("speedNow", -1) : -1);
+            o.put("speedError", p.getString("speedError", ""));
             o.put("pending", p.getString("pending", null) != null ? new JSONObject(p.getString("pending", "{}")) : JSONObject.NULL);
             o.put("places", PlacesDb.get(c).count());
             o.put("permission", hasLocationPermission(c));
@@ -122,9 +128,40 @@ public class TrackingService extends Service {
         TrackingService s = instance;
         if (s != null) {
             if (s.popup != null) s.popup.hide();
-            s.stopSelf();
+            if (SpeedAlert.active(c)) s.startAsForeground(); // Speed alert still needs the service; just update its notification
+            else s.stopSelf();
         }
         MainActivity.push(c);
+    }
+
+    /** Speed alert on or off (the "Speed alert" button). */
+    static void setSpeed(Context c, boolean on) {
+        prefs(c).edit().putBoolean("speedOn", on).remove("speedError").apply();
+        applySpeed(c);
+    }
+
+    /** Speed limit in km/h from Settings; 0 means not set. */
+    static void setSpeedLimit(Context c, int kmh) {
+        prefs(c).edit().putInt("speedLimit", Math.max(0, Math.min(400, kmh))).apply();
+        applySpeed(c);
+    }
+
+    /** Starts or stops the per-second GPS reading to match the settings. */
+    static void applySpeed(Context c) {
+        TrackingService s = instance;
+        if (SpeedAlert.active(c)) {
+            if (s != null) { s.watchSpeed(); s.startAsForeground(); }
+            else if (hasLocationPermission(c)) c.startForegroundService(new Intent(c, TrackingService.class).setAction(ACTION_SPEED));
+        } else if (s != null) {
+            s.watchSpeed();
+            if (recording(c)) s.startAsForeground(); else s.stopSelf();
+        }
+        MainActivity.push(c);
+    }
+
+    private void watchSpeed() {
+        if (speed == null) speed = new SpeedAlert(this);
+        if (SpeedAlert.active(this)) speed.start(); else speed.stop();
     }
 
     @Override
@@ -140,6 +177,7 @@ public class TrackingService extends Service {
     public void onDestroy() {
         instance = null;
         if (popup != null) popup.hide();
+        if (speed != null) speed.stop();
         cancelAlarm(this);
         releaseWake();
         super.onDestroy();
@@ -151,17 +189,26 @@ public class TrackingService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startAsForeground();
-        if (!recording(this)) { stopSelf(); return START_NOT_STICKY; }
-        capture(); // start, or an alarm arriving while the service had been stopped by the system
-        // Sticky: if Android stops the service to free memory, it starts it again while recording is on.
+        boolean rec = recording(this);
+        if (!rec && !SpeedAlert.active(this)) { stopSelf(); return START_NOT_STICKY; }
+        watchSpeed();
+        if (rec && !ACTION_SPEED.equals(intent == null ? null : intent.getAction())) {
+            capture(); // start, or an alarm arriving while the service had been stopped by the system
+        }
+        // Sticky: if Android stops the service to free memory, it starts it again while recording or Speed alert is on.
         return START_STICKY;
     }
 
     private void startAsForeground() {
+        boolean rec = recording(this);
+        String speedText = SpeedAlert.active(this) ? "Speed alert เกิน " + SpeedAlert.limit(this) + " กม./ชม." : "";
         Notification n = new Notification.Builder(this, CH_RUN)
                 .setSmallIcon(R.drawable.ic_stat)
-                .setContentTitle("กำลังบันทึกการเดินทาง")
-                .setContentText("จับพิกัดทุก " + intervalLabel(intervalMin(this)) + " · ครั้งที่ " + prefs(this).getInt("count", 0) + "/" + checkEvery(this))
+                .setContentTitle(rec ? "กำลังบันทึกการเดินทาง" : "Speed alert เปิดอยู่")
+                .setContentText(rec
+                        ? "จับพิกัดทุก " + intervalLabel(intervalMin(this)) + " · ครั้งที่ " + prefs(this).getInt("count", 0) + "/" + checkEvery(this)
+                            + (speedText.isEmpty() ? "" : " · " + speedText)
+                        : "เตือนด้วยเสียงเมื่อเร็วเกิน " + SpeedAlert.limit(this) + " กม./ชม.")
                 .setOngoing(true)
                 .setContentIntent(openApp(this))
                 .build();
