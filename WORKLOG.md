@@ -171,3 +171,14 @@ Request: owner order relayed by Manager on 2026-11-15.
 - With the phone in light mode, the page background is dark.
 - Java compiles in CI.
 - Not tested on the phone: the broadcast between the two apps.
+
+## 2026-11-18 (later): distance from the previous point
+
+- Every route row now also has `ระยะจากจุดก่อน(เมตร)` (straight line from the previous row) and `ระยะรวมวันนี้(กม.)`.
+  Today's file keeps its old header (two unnamed columns at the end); tomorrow's file gets the new header.
+- Moves under 20 m count as 0 (GPS drift while standing still) and do not move the reference point, so slow
+  creeping is still counted once it adds up. A late row (a place answered after newer fixes) gets no distance.
+- Main screen: "ระยะจากจุดก่อน" and "ระยะรวมวันนี้". File view: "+x จากจุดก่อน" per row and the day's total,
+  worked out from the coordinates, so older files show distances too.
+- Straight lines between fixes are shorter than the road; a shorter capture interval (Settings) gets closer.
+- Not tested on a real phone yet.
