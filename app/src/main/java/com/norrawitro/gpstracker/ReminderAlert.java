@@ -75,7 +75,7 @@ final class ReminderAlert {
     private static void showBox(Context c, String title, String text) {
         if (!WherePopup.allowed(c)) return; // the notification is the fallback
         hide(c);
-        boolean dark = (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        boolean dark = true; // dark theme always (owner rule 2026-11-16)
         int bg = dark ? Color.parseColor("#18211D") : Color.WHITE;
         int ink = dark ? Color.parseColor("#E4ECE7") : Color.parseColor("#15231D");
         int muted = dark ? Color.parseColor("#97A89F") : Color.parseColor("#5B6B63");

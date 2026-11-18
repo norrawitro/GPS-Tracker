@@ -62,6 +62,30 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         web.addJavascriptInterface(new Bridge(), "Android");
+        // Without this, confirm() in the page returns false at once and shows nothing
+        // (for example "ลบ token และกุญแจ" never went ahead).
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setPositiveButton("ตกลง", (d, w) -> result.confirm())
+                        .setNegativeButton("ยกเลิก", (d, w) -> result.cancel())
+                        .setOnCancelListener(d -> result.cancel())
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setPositiveButton("ตกลง", (d, w) -> result.confirm())
+                        .setOnCancelListener(d -> result.confirm())
+                        .show();
+                return true;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
