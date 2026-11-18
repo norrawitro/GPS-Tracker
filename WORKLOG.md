@@ -145,3 +145,29 @@ Request: owner order relayed by Manager on 2026-11-15.
   - the field shows the saved value again.
   - No errors and no sideways scrolling. The earlier status-link and reminder tests still pass.
 - **Not tested:** the Java builds in CI. I have not tried it on a real phone or while driving.
+
+## 2026-11-18: link to N-assistant (arrive / leave events), dark theme, confirm dialogs
+
+**Owner:** link N-assistant to GPS-Tracker, so it knows where the phone is and can remind by place. Example: when the owner drives out of home, remind "อย่าลืมเติมน้ำมันรถ".
+
+### What changed
+- **`AssistantLink` (new):** on every recorded fix, it works out whether the phone is in a saved place, then sends explicit broadcasts to `com.norrawitro.nassistant`:
+  - `enter` on arriving at a saved place;
+  - `leave` on leaving it;
+  - `fix` on every recording, with the current place.
+  - Every event carries lat, lng, the time and the list of saved place names.
+  - When recording stops, it sends `stopped`.
+- **Leaving needs a clear margin:** the fix must be more than twice the place radius away, and at least 200 m. This stops GPS jitter at the edge of a place from sending leave/enter over and over.
+- **Security:** the broadcasts need the signature permission `com.norrawitro.gpstracker.permission.PLACE_EVENTS`, declared in both apps. Only apps signed with the owner's key hold it. Nothing leaves the phone.
+- **Dark theme always** (owner rule 2026-11-16, first GPS-Tracker change since): the page, the Android window theme, the "คุณอยู่ที่ไหน?" popup and the reminder popup.
+- **`confirm()` fixed:** the WebView had no `WebChromeClient`, so `confirm()` returned false. "ลบ token และกุญแจ" never went ahead, and the same bug had been found in N-assistant. Confirm and alert now show Android dialogs.
+
+### Limits
+- Events only exist while recording is on.
+- They come at the fix interval (default 10 minutes), so a "leave" reminder can be up to one interval late.
+
+### Checks
+- The earlier Speed alert and status-link browser tests still pass.
+- With the phone in light mode, the page background is dark.
+- Java compiles in CI.
+- Not tested on the phone: the broadcast between the two apps.

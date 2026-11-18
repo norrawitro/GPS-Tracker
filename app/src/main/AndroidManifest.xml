@@ -20,6 +20,16 @@
     <!-- Optional: lets the status file include time on screen today. The person grants it in Settings. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
+    <!-- Arrive / leave events for N-assistant. Only apps signed with the same key can hold this. -->
+    <permission
+        android:name="com.norrawitro.gpstracker.permission.PLACE_EVENTS"
+        android:label="รับเหตุการณ์เข้าออกสถานที่จาก GPS-Tracker"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.norrawitro.gpstracker.permission.PLACE_EVENTS" />
+    <queries>
+        <package android:name="com.norrawitro.nassistant" />
+    </queries>
+
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application

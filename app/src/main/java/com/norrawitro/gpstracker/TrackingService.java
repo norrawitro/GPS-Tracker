@@ -122,6 +122,7 @@ public class TrackingService extends Service {
     }
 
     static void stop(Context c) {
+        AssistantLink.onStop(c);
         prefs(c).edit().putBoolean("recording", false).putInt("count", 0).remove("pending").putLong("nextAt", 0).apply();
         cancelAlarm(c);
         c.getSystemService(NotificationManager.class).cancel(NOTIF_ASK);
@@ -354,6 +355,7 @@ public class TrackingService extends Service {
                 .remove("lastError").apply();
 
         PlacesDb.Place near = PlacesDb.get(this).nearestWithin(lat, lng);
+        AssistantLink.onFix(this, at, lat, lng, near); // arrive / leave events for N-assistant reminders
         if (near != null) {
             write(at, lat, lng, near.name);
             p.edit().putInt("count", 0).remove("anchorLat").remove("anchorLng").putString("lastPlace", near.name).apply();
