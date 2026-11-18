@@ -98,6 +98,9 @@ public class TrackingService extends Service {
             o.put("nearName", p.getString("nearName", ""));
             o.put("nearM", p.getLong("nearM", -1));
             o.put("battery", p.getInt("battery", -1));
+            String today = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date());
+            o.put("stepM", p.getLong("lastStepM", -1));
+            o.put("dayM", today.equals(p.getString("distDay", "")) ? Math.round(Double.longBitsToDouble(p.getLong("distDayM", 0))) : 0);
             o.put("nextAt", p.getLong("nextAt", 0));
             o.put("lastError", p.getString("lastError", ""));
             o.put("speedOn", SpeedAlert.on(c));
@@ -439,7 +442,8 @@ public class TrackingService extends Service {
             try {
                 PlacesDb.Place near = PlacesDb.get(this).nearest(lat, lng);
                 int battery = batteryPct(this);
-                TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM, battery);
+                double[] dist = distance(at, lat, lng);
+                TrackLog.append(this, at, lat, lng, place, near == null ? null : near.name, near == null ? 0 : near.distanceM, battery, dist[0], dist[1]);
                 prefs(this).edit().putInt("battery", battery).apply();
                 SharedPreferences.Editor e = prefs(this).edit();
                 if (near == null) e.remove("nearName").remove("nearM");
@@ -450,6 +454,34 @@ public class TrackingService extends Service {
             }
             MainActivity.push(this);
         });
+    }
+
+    /** Moves shorter than this are GPS drift while standing still, not travel. */
+    static final double DRIFT_M = 20;
+
+    /**
+     * Distance from the previous written row (straight line) and the day's running total, in metres.
+     * Returns {-1, total} for the first row ever and for a row older than the previous one (a place answered late),
+     * so those never count twice. Runs on the single io thread, so rows are chained in the order they are written.
+     */
+    private double[] distance(long at, double lat, double lng) {
+        SharedPreferences p = prefs(this);
+        String day = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date(at));
+        double total = day.equals(p.getString("distDay", "")) ? Double.longBitsToDouble(p.getLong("distDayM", 0)) : 0;
+        long prevAt = p.getLong("distAt", 0);
+        if (prevAt != 0 && at < prevAt) return new double[]{-1, total};
+        double step = -1;
+        if (prevAt != 0) {
+            double d = PlacesDb.distanceM(Double.longBitsToDouble(p.getLong("distLat", 0)), Double.longBitsToDouble(p.getLong("distLng", 0)), lat, lng);
+            step = d < DRIFT_M ? 0 : d;
+        }
+        if (step > 0) total += step;
+        SharedPreferences.Editor e = p.edit().putLong("distAt", at).putString("distDay", day)
+                .putLong("distDayM", Double.doubleToRawLongBits(total)).putLong("lastStepM", step < 0 ? -1 : Math.round(step));
+        // Drift does not move the chain's point, so slow creeping is not lost and standing still adds nothing.
+        if (step != 0) e.putLong("distLat", Double.doubleToRawLongBits(lat)).putLong("distLng", Double.doubleToRawLongBits(lng));
+        e.apply();
+        return new double[]{step, total};
     }
 
     /** Battery level 0-100, or -1 when the phone does not report it. */

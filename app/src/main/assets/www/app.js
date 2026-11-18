@@ -18,6 +18,19 @@
   let toastTimer;
   function toast(msg) { $("toast").textContent = msg; $("toast").hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").hidden = true, 3500); }
 
+  // ---------- distance ----------
+  /** 850 -> "850 ม.", 12345 -> "12.35 กม." */
+  function dist(m) { m = Math.round(+m || 0); return m < 1000 ? `${m.toLocaleString("th-TH")} ม.` : `${(m / 1000).toFixed(2)} กม.`; }
+  /** Straight-line metres between two rows, same rule as the app: under 20 m is GPS drift (0). */
+  function rowStep(a, b) {
+    const R = 6371008.8, r = x => x * Math.PI / 180;
+    const la1 = +a[1], lo1 = +a[2], la2 = +b[1], lo2 = +b[2];
+    if (![la1, lo1, la2, lo2].every(isFinite)) return 0;
+    const h = Math.sin(r(la2 - la1) / 2) ** 2 + Math.cos(r(la1)) * Math.cos(r(la2)) * Math.sin(r(lo2 - lo1) / 2) ** 2;
+    const d = 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    return d < 20 ? 0 : d;
+  }
+
   // ---------- status ----------
   function render() {
     const s = state, on = !!s.recording;
@@ -30,6 +43,8 @@
     $("lastAt").textContent = s.lastAt ? fmt(s.lastAt) : "-";
     $("lastPlace").textContent = s.lastPlace || "-";
     $("nearText").textContent = s.nearName && s.nearM >= 0 ? `ใกล้ ${s.nearName} ${Number(s.nearM).toLocaleString("th-TH")} เมตร` : "-";
+    $("stepText").textContent = s.stepM >= 0 ? dist(s.stepM) : "-";
+    $("dayText").textContent = s.dayM > 0 ? dist(s.dayM) : "0 ม.";
     $("nextAt").textContent = on && s.nextAt ? hm(s.nextAt) : on ? "กำลังจับพิกัด…" : "-";
     $("errText").hidden = !s.lastError; $("errText").textContent = s.lastError || "";
     $("placesText").textContent = `สถานที่ที่จำไว้แล้ว ${s.places || 0} แห่ง` + (s.battery >= 0 ? ` · แบตตอนบันทึกล่าสุด ${s.battery}%` : "");
@@ -175,10 +190,14 @@
     const key = t => { const m = String(t || "").match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}:\d{2}:\d{2})/); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}` : String(t); };
     const rows = (r.rows || []).slice().sort((x, y) => key(x[0]).localeCompare(key(y[0])));
     const named = rows.filter(x => (x[3] || "").trim()).length;
-    $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง` : "ไฟล์นี้ยังไม่มีข้อมูล";
+    // Distances are worked out from the coordinates, so older files (written before the distance columns) get them too.
+    // Drift does not move the reference point, the same as when recording.
+    const steps = []; let ref = null, total = 0;
+    rows.forEach(x => { const d = ref ? rowStep(ref, x) : -1; steps.push(d); if (d !== 0) ref = x; if (d > 0) total += d; });
+    $("fileSummary").textContent = rows.length ? `บันทึก ${rows.length} ครั้ง · มีชื่อสถานที่ ${named} ครั้ง · ระยะทางรวม ${dist(total)} (วัดเป็นเส้นตรงระหว่างจุด)` : "ไฟล์นี้ยังไม่มีข้อมูล";
     // Date above time, so the whole row fits a phone screen without scrolling sideways.
     const when = v => { const [d, t] = String(v || "").split(" "); return t ? `<span class="t">${esc(t)}</span><span class="dd">${esc(d)}</span>` : esc(v); };
-    $("fileRows").innerHTML = rows.map(x => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}${x[6] ? `<span class="near">แบต ${esc(x[6])}%</span>` : ""}</td></tr>`).join("")
+    $("fileRows").innerHTML = rows.map((x, i) => `<tr><td class="num when">${when(x[0])}</td><td class="num pos"><span>${esc(x[1])}</span><span>${esc(x[2])}</span></td><td class="place">${esc(x[3] || "")}${x[4] ? `<span class="near">ใกล้ ${esc(x[4])} · ${esc(x[5])} ม.</span>` : ""}${x[6] ? `<span class="near">แบต ${esc(x[6])}%</span>` : ""}${steps[i] > 0 ? `<span class="near">+${dist(steps[i])} จากจุดก่อน</span>` : ""}</td></tr>`).join("")
       || '<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลการเดินทาง</td></tr>';
   };
   $("backFiles").addEventListener("click", () => showView("vFiles"));
